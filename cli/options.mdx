@@ -1,0 +1,608 @@
+---
+title: Command-line options
+description: Complete reference for all TCC command-line options and flags
+---
+
+## Output options
+
+<ParamField path="-o outfile" type="string">
+  Specify the output filename for the object file, executable, or shared library.
+</ParamField>
+
+```bash
+# Generate executable
+tcc -o myprogram source.c
+
+# Generate object file
+tcc -c -o myobject.o source.c
+
+# Generate shared library
+tcc -shared -o libmylib.so mylib.c
+```
+
+<ParamField path="-c" type="flag">
+  Compile only - generate an object file without linking.
+</ParamField>
+
+<ParamField path="-run" type="flag">
+  Compile and run the program immediately with optional arguments.
+</ParamField>
+
+## Preprocessor options
+
+### Include paths
+
+<ParamField path="-Idir" type="string">
+  Add a directory to the include file search path. Include paths are searched in the order they are specified. System include paths are always searched after user-specified paths.
+</ParamField>
+
+```bash
+tcc -I/usr/local/mylib/include -I./include source.c
+```
+
+Default system include paths:
+- `/usr/local/include`
+- `/usr/include`
+- `PREFIX/lib/tcc/include` (usually `/usr/lib/tcc/include`)
+
+<ParamField path="-isystem dir" type="string">
+  Add a directory to the system include path. Files from system include paths are treated as system headers.
+</ParamField>
+
+```bash
+tcc -isystem /opt/include source.c
+```
+
+<ParamField path="-nostdinc" type="flag">
+  Do not search the default system include paths. Only search include paths explicitly provided with `-I`.
+</ParamField>
+
+```bash
+tcc -nostdinc -I./include source.c
+```
+
+### Macro definitions
+
+<ParamField path="-Dsym[=val]" type="string">
+  Define a preprocessor symbol. If `val` is not provided, the value is `1`. Function-like macros can also be defined.
+</ParamField>
+
+```bash
+# Define simple macro
+tcc -DDEBUG source.c
+
+# Define macro with value
+tcc -DVERSION=2 source.c
+
+# Define function-like macro
+tcc -D'MAX(a,b)=((a)>(b)?(a):(b))' source.c
+```
+
+<ParamField path="-Usym" type="string">
+  Undefine a preprocessor symbol.
+</ParamField>
+
+```bash
+tcc -U__STDC__ source.c
+```
+
+### Include files
+
+<ParamField path="-include file" type="string">
+  Include the specified file before processing each input file, as if `#include "file"` appeared at the beginning.
+</ParamField>
+
+```bash
+tcc -include config.h source.c
+```
+
+### Preprocessing output
+
+<ParamField path="-E" type="flag">
+  Preprocess only - output preprocessed source to stdout or file (with `-o`).
+</ParamField>
+
+<ParamField path="-P" type="flag">
+  With `-E`: do not output `#line` directives in preprocessed output.
+</ParamField>
+
+<ParamField path="-P1" type="flag">
+  With `-E`: output alternative `#line` directives.
+</ParamField>
+
+<ParamField path="-dD" type="flag">
+  With `-E`: output `#define` directives along with preprocessed code.
+</ParamField>
+
+<ParamField path="-dM" type="flag">
+  With `-E`: output only `#define` directives, no preprocessed code.
+</ParamField>
+
+```bash
+# Standard preprocessing
+tcc -E source.c
+
+# Preprocessing without line directives
+tcc -E -P source.c -o source.i
+
+# Show all macros
+tcc -E -dM - < /dev/null
+```
+
+<ParamField path="-Wp,-opt" type="string">
+  Pass option directly to preprocessor. Equivalent to using `-opt` directly.
+</ParamField>
+
+## Compilation flags
+
+<Note>
+  Most compilation flags support a negative form with the `-fno-` prefix to disable the feature.
+</Note>
+
+### Character type
+
+<ParamField path="-funsigned-char" type="flag">
+  Make the `char` type unsigned by default.
+</ParamField>
+
+<ParamField path="-fsigned-char" type="flag">
+  Make the `char` type signed by default.
+</ParamField>
+
+```bash
+tcc -funsigned-char source.c
+```
+
+### Symbol behavior
+
+<ParamField path="-fno-common" type="flag">
+  Do not generate common symbols for uninitialized global data. Place uninitialized globals in BSS instead.
+</ParamField>
+
+<ParamField path="-fleading-underscore" type="flag">
+  Add a leading underscore to the beginning of each C symbol (for compatibility with some platforms).
+</ParamField>
+
+### Language extensions
+
+<ParamField path="-fms-extensions" type="flag">
+  Allow Microsoft C compiler extensions. Currently this enables anonymous struct/union declarations without an identifier to behave like unnamed members.
+</ParamField>
+
+```c
+// Enabled with -fms-extensions
+struct {
+    int x;
+    struct {
+        int y;
+        int z;
+    };  // Anonymous struct - members accessible directly
+} data;
+// Access: data.y, data.z
+```
+
+<ParamField path="-fdollars-in-identifiers" type="flag">
+  Allow dollar signs (`$`) in C identifiers.
+</ParamField>
+
+```c
+int my$variable = 42;  // Valid with -fdollars-in-identifiers
+```
+
+### Function behavior
+
+<ParamField path="-freverse-funcargs" type="flag">
+  Evaluate function arguments from right to left instead of left to right.
+</ParamField>
+
+<ParamField path="-fgnu89-inline" type="flag">
+  Make `extern inline` behave like `static inline` (GNU89 semantics).
+</ParamField>
+
+### Debug and analysis
+
+<ParamField path="-fasynchronous-unwind-tables" type="flag">
+  Generate exception handling frame section (`eh_frame`). This is enabled by default.
+</ParamField>
+
+<ParamField path="-ftest-coverage" type="flag">
+  Generate code coverage instrumentation. After running the program, a `.tcov` file is created with coverage data.
+</ParamField>
+
+```bash
+tcc -ftest-coverage program.c -o program
+./program
+# Creates: program.tcov
+```
+
+## Warning options
+
+<ParamField path="-w" type="flag">
+  Disable all warnings.
+</ParamField>
+
+```bash
+tcc -w source.c
+```
+
+<Note>
+  Most warning options support a negative form with the `-Wno-` prefix.
+</Note>
+
+<ParamField path="-Wall" type="flag">
+  Enable commonly useful warnings. Includes:
+  - `-Wimplicit-function-declaration`
+  - `-Wdiscarded-qualifiers`
+</ParamField>
+
+<ParamField path="-Werror" type="flag">
+  Treat all warnings as errors. Can be given an option to enable a specific warning and treat it as an error.
+</ParamField>
+
+```bash
+# Treat all warnings as errors
+tcc -Werror source.c
+
+# Treat only unsupported warnings as errors
+tcc -Werror=unsupported source.c
+```
+
+### Specific warnings
+
+<ParamField path="-Wimplicit-function-declaration" type="flag">
+  Warn when a function is called without a prior declaration or prototype.
+</ParamField>
+
+<ParamField path="-Wdiscarded-qualifiers" type="flag">
+  Warn when type qualifiers like `const` are dropped (e.g., assigning `const char *` to `char *`).
+</ParamField>
+
+<ParamField path="-Wunsupported" type="flag">
+  Warn about unsupported GCC features and options that are ignored by TCC.
+</ParamField>
+
+<ParamField path="-Wwrite-strings" type="flag">
+  Make string literals of type `const char *` instead of `char *`.
+</ParamField>
+
+```bash
+tcc -Wall -Wwrite-strings source.c
+```
+
+## Linker options
+
+### Library paths
+
+<ParamField path="-Ldir" type="string">
+  Add a directory to the library search path for the `-l` option.
+</ParamField>
+
+```bash
+tcc -L/usr/local/lib -L./lib source.c
+```
+
+Default library paths:
+- `/usr/local/lib`
+- `/usr/lib`
+- `/lib`
+
+### Libraries
+
+<ParamField path="-lxxx" type="string">
+  Link with dynamic library `libxxx.so` or static library `libxxx.a`. Libraries are searched in paths specified by `-L` and the `LIBRARY_PATH` environment variable.
+</ParamField>
+
+```bash
+# Link with math library
+tcc source.c -lm
+
+# Link with multiple libraries
+tcc source.c -lpthread -lm -lrt
+```
+
+<ParamField path="-Bdir" type="string">
+  Set the path where TCC's internal libraries and include files are located. Default is `PREFIX/lib/tcc`.
+</ParamField>
+
+### Library generation
+
+<ParamField path="-shared" type="flag">
+  Generate a shared library instead of an executable.
+</ParamField>
+
+<ParamField path="-soname name" type="string">
+  Set the shared object name (DT_SONAME) to be used at runtime.
+</ParamField>
+
+<ParamField path="-static" type="flag">
+  Generate a statically linked executable. Links with static versions of libraries. This is not recommended as it may not work correctly with TCC.
+</ParamField>
+
+<Warning>
+  Static linking with `-static` is not fully supported and may not work correctly. TCC primarily targets dynamic linking.
+</Warning>
+
+<ParamField path="-rdynamic" type="flag">
+  Export global symbols to the dynamic linker. Useful when a library opened with `dlopen()` needs to access symbols from the main executable.
+</ParamField>
+
+<ParamField path="-r" type="flag">
+  Generate a relocatable object file by combining all input files.
+</ParamField>
+
+### Standard library options
+
+<ParamField path="-nostdlib" type="flag">
+  Do not implicitly link with the C standard library (`libc`), C runtime startup files, and `libtcc1`.
+</ParamField>
+
+<ParamField path="-Wl,-nostdlib" type="flag">
+  Do not search the default library paths. Only search paths specified with `-L` and the `LIBRARY_PATH` environment variable.
+</ParamField>
+
+```bash
+# Compile without standard library
+tcc -nostdlib -o program start.o program.c
+```
+
+### Advanced linker options
+
+All options starting with `-Wl,` are passed to the linker:
+
+<ParamField path="-Wl,-rpath=path" type="string">
+  Set custom search path for dynamic libraries in the executable.
+</ParamField>
+
+```bash
+tcc -Wl,-rpath=/opt/lib source.c
+```
+
+<ParamField path="-Wl,--dynamic-linker=path" type="string">
+  Set the ELF interpreter (dynamic linker) path.
+</ParamField>
+
+<ParamField path="-Wl,-Ipath" type="string">
+  Alternative syntax for setting the dynamic linker path.
+</ParamField>
+
+<ParamField path="-Wl,--enable-new-dtags" type="flag">
+  Create the new ELF dynamic tag `DT_RUNPATH` instead of the legacy `DT_RPATH` when setting custom library search paths.
+</ParamField>
+
+<ParamField path="-Wl,--oformat=fmt" type="string">
+  Set the output format. Supported formats:
+  - `elf32-i386` or `elf64-x86-64`: ELF format (default)
+  - `binary`: Raw binary image (executables only)
+  - `coff`: COFF format (TMS320C67xx target only)
+  - `pe-i386` or `pe-x86-64`: PE format (Windows)
+</ParamField>
+
+```bash
+# Generate raw binary
+tcc -Wl,--oformat=binary bootloader.c -o boot.bin
+```
+
+<ParamField path="-Wl,--export-all-symbols" type="flag">
+  Same as `-rdynamic` - export all symbols to dynamic linker.
+</ParamField>
+
+<ParamField path="-Wl,--export-dynamic" type="flag">
+  Same as `-rdynamic` - export all symbols to dynamic linker.
+</ParamField>
+
+<ParamField path="-Wl,-Bsymbolic" type="flag">
+  Set the `DT_SYMBOLIC` ELF tag, which makes symbol resolution within the library prefer local definitions.
+</ParamField>
+
+<ParamField path="-Wl,--whole-archive" type="flag">
+  Include all object files from subsequent static libraries, not just those needed to resolve undefined symbols.
+</ParamField>
+
+<ParamField path="-Wl,--no-whole-archive" type="flag">
+  Return to normal behavior - only load objects as needed from static libraries.
+</ParamField>
+
+```bash
+tcc -Wl,--whole-archive -lmylib -Wl,--no-whole-archive source.c
+```
+
+### Executable layout (Advanced)
+
+<ParamField path="-Wl,-Ttext=address" type="string">
+  Set the base address of the code section.
+</ParamField>
+
+<ParamField path="-Wl,--image-base=address" type="string">
+  Set the base address of the executable.
+</ParamField>
+
+<ParamField path="-Wl,--section-alignment=size" type="string">
+  Set section alignment in the executable.
+</ParamField>
+
+<ParamField path="-Wl,--file-alignment=size" type="string">
+  Set file alignment (PE format only).
+</ParamField>
+
+<ParamField path="-Wl,--stack=size" type="string">
+  Set stack reserve size (PE format only).
+</ParamField>
+
+### Windows-specific options
+
+<ParamField path="-Wl,--subsystem=type" type="string">
+  Set PE (Windows) executable subsystem type: `console`, `gui`, `wince`, etc.
+</ParamField>
+
+```bash
+tcc -Wl,--subsystem=console program.c -o program.exe
+```
+
+## Debugger options
+
+<ParamField path="-g" type="flag">
+  Generate runtime debug information in STAB format. Provides clear error messages like `test.c:68: in function 'test5()': dereferencing invalid pointer` instead of just `Segmentation fault`.
+</ParamField>
+
+```bash
+tcc -g program.c -o program
+```
+
+<ParamField path="-gdwarf" type="flag">
+  Generate runtime debug information in DWARF format instead of STAB.
+</ParamField>
+
+<ParamField path="-gdwarf-x" type="flag">
+  Generate extended DWARF debug information.
+</ParamField>
+
+<ParamField path="-g.pdb" type="flag">
+  Create a `.pdb` debug database file (Windows PE targets only).
+</ParamField>
+
+<ParamField path="-b" type="flag">
+  Compile with built-in memory and bounds checker. Detects memory allocation errors and array/pointer bounds violations at runtime. Implies `-g`.
+</ParamField>
+
+```bash
+tcc -b program.c -o program
+./program
+# Runtime bounds checking active
+```
+
+<Warning>
+  The bounds checker (`-b`) adds significant runtime overhead. Only use during development and testing.
+</Warning>
+
+<ParamField path="-bt[N]" type="flag">
+  Link with backtrace support and display up to N callers in stack traces. Useful with `-g` or `-b`. Defines the `__TCC_BACKTRACE__` macro.
+</ParamField>
+
+Provides access to:
+```c
+int tcc_backtrace(const char *fmt, ...);
+```
+
+Example:
+```bash
+# Show up to 10 callers in stack traces
+tcc -bt10 -g program.c -o program
+```
+
+## Miscellaneous options
+
+<ParamField path="-std=version" type="string">
+  Define the `__STDC_VERSION__` macro. Use `c11` or `gnu11` for C11 standard (sets to `201112`), otherwise sets to `199901` (C99).
+</ParamField>
+
+```bash
+tcc -std=c11 source.c
+```
+
+<ParamField path="-x type" type="string">
+  Specify the type of the next input file:
+  - `c`: C source file
+  - `a`: Assembly file
+  - `b`: Binary file
+  - `n`: None (reset to auto-detection)
+</ParamField>
+
+```bash
+tcc -xc header.h -xn source.c
+```
+
+<ParamField path="-O[n]" type="flag">
+  Define `__OPTIMIZE__` macro for optimization level `n`. `-O0` does not define the macro.
+</ParamField>
+
+```bash
+tcc -O2 source.c
+```
+
+<Note>
+  TCC does minimal optimization. The `-O` flag mainly affects preprocessor macros for conditional compilation.
+</Note>
+
+<ParamField path="-pthread" type="flag">
+  Preprocess with `-D_REENTRANT` and link with `-lpthread`.
+</ParamField>
+
+```bash
+tcc -pthread threaded_program.c
+```
+
+### Dependency generation
+
+<ParamField path="-M" type="flag">
+  Output Makefile dependency rules instead of compiling. Includes system headers.
+</ParamField>
+
+<ParamField path="-MM" type="flag">
+  Like `-M` but only mention user header files, not system headers.
+</ParamField>
+
+<ParamField path="-MD" type="flag">
+  Generate Makefile dependency file while also compiling.
+</ParamField>
+
+<ParamField path="-MMD" type="flag">
+  Like `-MD` but only mention user header files.
+</ParamField>
+
+<ParamField path="-MF depfile" type="string">
+  Specify the output filename for dependency information (use with `-MD` or `-MMD`).
+</ParamField>
+
+<ParamField path="-MP" type="flag">
+  Add phony targets for each dependency (prevents make errors if headers are removed).
+</ParamField>
+
+```bash
+# Generate dependencies while compiling
+tcc -MMD -MF source.d -c source.c
+
+# Generate only dependencies
+tcc -MM source.c > source.d
+```
+
+<ParamField path="-dt" type="flag">
+  With `-run` or `-E`: automatically define `test_...` macros for testing purposes.
+</ParamField>
+
+## Target-specific options
+
+<ParamField path="-m32" type="flag">
+  Generate 32-bit code (defer to i386 cross compiler if needed).
+</ParamField>
+
+<ParamField path="-m64" type="flag">
+  Generate 64-bit code (defer to x86_64 cross compiler if needed).
+</ParamField>
+
+```bash
+tcc -m32 source.c -o program32
+```
+
+<ParamField path="-mms-bitfields" type="flag">
+  Use Microsoft Visual C++ algorithm for bitfield layout instead of GCC's algorithm.
+</ParamField>
+
+<ParamField path="-mfloat-abi" type="string">
+  Select floating-point ABI on ARM. Values: `softfp` or `hard`.
+</ParamField>
+
+<ParamField path="-mno-sse" type="flag">
+  Do not use SSE registers for floating-point operations on x86_64.
+</ParamField>
+
+## Ignored options
+
+The following GCC options are recognized but ignored for compatibility:
+
+```bash
+-arch -C --param -pedantic -pipe -s -traditional
+```
+
+<Tip>
+  Use `-Wunsupported` to get warnings about ignored GCC features and options.
+</Tip>

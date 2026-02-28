@@ -1,0 +1,354 @@
+---
+title: Initialization
+description: Creating and configuring a TCC compilation context
+---
+
+Before you can compile code with libtcc, you need to create and configure a compilation context (`TCCState`).
+
+## Creating a compilation context
+
+### tcc_new
+
+Creates a new TCC compilation context.
+
+```c
+TCCState *tcc_new(void);
+```
+
+<ResponseField name="return" type="TCCState*">
+  Pointer to the newly created compilation context, or `NULL` if allocation fails.
+</ResponseField>
+
+**Example:**
+
+```c
+TCCState *s = tcc_new();
+if (!s) {
+    fprintf(stderr, "Could not create TCC state\n");
+    exit(1);
+}
+```
+
+<Warning>
+You must call `tcc_set_output_type()` before any compilation.
+</Warning>
+
+## Destroying a compilation context
+
+### tcc_delete
+
+Frees a TCC compilation context and all associated resources.
+
+```c
+void tcc_delete(TCCState *s);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context to free.
+</ParamField>
+
+**Example:**
+
+```c
+tcc_delete(s);
+```
+
+## Setting output type
+
+### tcc_set_output_type
+
+Sets the output type for the compilation. **Must be called before any compilation.**
+
+```c
+int tcc_set_output_type(TCCState *s, int output_type);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="output_type" type="int" required>
+  The type of output to generate. One of:
+  - `TCC_OUTPUT_MEMORY` (1) - Run code in memory
+  - `TCC_OUTPUT_EXE` (2) - Executable file
+  - `TCC_OUTPUT_DLL` (4) - Dynamic library
+  - `TCC_OUTPUT_OBJ` (3) - Object file
+  - `TCC_OUTPUT_PREPROCESS` (5) - Only preprocess
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success, -1 on error.
+</ResponseField>
+
+**Example:**
+
+```c
+if (tcc_set_output_type(s, TCC_OUTPUT_MEMORY) < 0) {
+    fprintf(stderr, "Failed to set output type\n");
+    return 1;
+}
+```
+
+## Configuring paths
+
+### tcc_set_lib_path
+
+Sets the path where TCC will look for its internal libraries and include files.
+
+```c
+void tcc_set_lib_path(TCCState *s, const char *path);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="path" type="const char*" required>
+  Path to the TCC library directory (typically contains `include/` and `lib/`).
+</ParamField>
+
+**Example:**
+
+```c
+tcc_set_lib_path(s, "/usr/local/lib/tcc");
+```
+
+### tcc_add_include_path
+
+Adds a directory to the include file search path.
+
+```c
+int tcc_add_include_path(TCCState *s, const char *pathname);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="pathname" type="const char*" required>
+  Path to add to the include search path.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success.
+</ResponseField>
+
+**Example:**
+
+```c
+tcc_add_include_path(s, "/usr/local/include");
+tcc_add_include_path(s, "./my_headers");
+```
+
+### tcc_add_sysinclude_path
+
+Adds a system include path to the default system include paths.
+
+```c
+int tcc_add_sysinclude_path(TCCState *s, const char *pathname);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="pathname" type="const char*" required>
+  System include path to add.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success.
+</ResponseField>
+
+## Setting options
+
+### tcc_set_options
+
+Sets compiler options as if passed on the command line. Multiple calls are supported.
+
+```c
+int tcc_set_options(TCCState *s, const char *str);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="str" type="const char*" required>
+  Command-line style options (e.g., "-Wall -O2").
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success, -1 on error.
+</ResponseField>
+
+**Example:**
+
+```c
+tcc_set_options(s, "-Wall -Werror");
+tcc_set_options(s, "-nostdinc");
+```
+
+## Error handling
+
+### tcc_set_error_func
+
+Sets a custom error and warning callback.
+
+```c
+typedef void TCCErrorFunc(void *opaque, const char *msg);
+void tcc_set_error_func(TCCState *s, void *error_opaque, TCCErrorFunc *error_func);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="error_opaque" type="void*">
+  User data pointer passed to the error callback (can be `NULL`).
+</ParamField>
+
+<ParamField path="error_func" type="TCCErrorFunc*">
+  Callback function for errors and warnings. If `NULL`, errors are printed to stderr.
+</ParamField>
+
+**Example:**
+
+```c
+void handle_error(void *opaque, const char *msg) {
+    FILE *fp = (FILE*)opaque;
+    fprintf(fp, "TCC Error: %s\n", msg);
+}
+
+tcc_set_error_func(s, stderr, handle_error);
+```
+
+## Preprocessor configuration
+
+### tcc_define_symbol
+
+Defines a preprocessor symbol.
+
+```c
+void tcc_define_symbol(TCCState *s, const char *sym, const char *value);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="sym" type="const char*" required>
+  Symbol name. Can be "sym=val" form, or just "sym".
+</ParamField>
+
+<ParamField path="value" type="const char*">
+  Symbol value. If `NULL` and `sym` doesn't contain '=', defaults to "1".
+</ParamField>
+
+**Example:**
+
+```c
+tcc_define_symbol(s, "DEBUG", NULL);           // #define DEBUG 1
+tcc_define_symbol(s, "VERSION", "2.0");         // #define VERSION 2.0
+tcc_define_symbol(s, "MAX_SIZE=1024", NULL);   // #define MAX_SIZE 1024
+```
+
+### tcc_undefine_symbol
+
+Undefines a preprocessor symbol.
+
+```c
+void tcc_undefine_symbol(TCCState *s, const char *sym);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="sym" type="const char*" required>
+  Symbol name to undefine.
+</ParamField>
+
+**Example:**
+
+```c
+tcc_undefine_symbol(s, "NDEBUG");
+```
+
+## Custom memory allocator
+
+### tcc_set_realloc
+
+Sets a custom memory allocator for all TCC allocations. This is a global setting.
+
+```c
+typedef void *TCCReallocFunc(void *ptr, unsigned long size);
+void tcc_set_realloc(TCCReallocFunc *my_realloc);
+```
+
+<ParamField path="my_realloc" type="TCCReallocFunc*">
+  Custom realloc-style function. If `NULL`, uses the default allocator.
+  The function should free memory when `size` is 0.
+</ParamField>
+
+<Warning>
+This must be called before creating any `TCCState` instances, as it affects all TCC memory allocation globally.
+</Warning>
+
+**Example:**
+
+```c
+void *my_realloc(void *ptr, unsigned long size) {
+    if (size == 0) {
+        free(ptr);
+        return NULL;
+    }
+    return realloc(ptr, size);
+}
+
+tcc_set_realloc(my_realloc);
+```
+
+## Complete initialization example
+
+```c
+#include "libtcc.h"
+#include <stdio.h>
+
+void error_handler(void *opaque, const char *msg) {
+    fprintf(stderr, "TCC: %s\n", msg);
+}
+
+int main() {
+    TCCState *s;
+    
+    // Create new state
+    s = tcc_new();
+    if (!s) {
+        fprintf(stderr, "Failed to create TCC state\n");
+        return 1;
+    }
+    
+    // Configure error handling
+    tcc_set_error_func(s, NULL, error_handler);
+    
+    // Set paths
+    tcc_set_lib_path(s, "/usr/local/lib/tcc");
+    tcc_add_include_path(s, "./include");
+    
+    // Set compiler options
+    tcc_set_options(s, "-Wall");
+    
+    // Define preprocessor symbols
+    tcc_define_symbol(s, "MY_APP", NULL);
+    tcc_define_symbol(s, "VERSION", "\"1.0\"");
+    
+    // Set output type (required before compilation)
+    tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+    
+    // Now ready to compile...
+    
+    tcc_delete(s);
+    return 0;
+}
+```

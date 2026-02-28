@@ -1,0 +1,92 @@
+---
+title: Overview
+description: Introduction to the libtcc library for dynamic C code generation
+---
+
+The `libtcc` library enables you to use TCC as a backend for dynamic code generation. It allows you to compile C code at runtime and execute it directly in memory.
+
+## Key features
+
+- **In-memory compilation**: Compile C source code to executable code in memory without generating intermediate files
+- **Symbol management**: Add and retrieve symbols (functions and variables) dynamically
+- **Fast compilation**: Leverage TCC's extremely fast compilation speed
+- **Flexible output**: Generate executables, shared libraries, object files, or run code directly in memory
+- **Error handling**: Custom error and warning callbacks for integration into your application
+
+## Basic workflow
+
+Using libtcc follows a simple pattern:
+
+1. **Initialize**: Create a new compilation context with `tcc_new()`
+2. **Configure**: Set output type, include paths, and compiler options
+3. **Compile**: Add C source code using `tcc_compile_string()` or `tcc_add_file()`
+4. **Link**: Add libraries and symbols with `tcc_add_library()` and `tcc_add_symbol()`
+5. **Execute**: Either run code in memory or output to a file
+6. **Cleanup**: Free resources with `tcc_delete()`
+
+## Quick example
+
+```c
+#include "libtcc.h"
+
+int main() {
+    TCCState *s;
+    int (*func)(int);
+    
+    // Create compilation context
+    s = tcc_new();
+    if (!s) return 1;
+    
+    // Set output type to memory
+    tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+    
+    // Compile C code
+    tcc_compile_string(s, 
+        "int add(int a, int b) { return a + b; }");
+    
+    // Relocate code
+    if (tcc_relocate(s) < 0) return 1;
+    
+    // Get function pointer
+    func = tcc_get_symbol(s, "add");
+    
+    // Call the compiled function
+    int result = func(5, 3);  // Returns 8
+    
+    // Cleanup
+    tcc_delete(s);
+    return 0;
+}
+```
+
+## Output types
+
+libtcc supports multiple output types, set via `tcc_set_output_type()`:
+
+- `TCC_OUTPUT_MEMORY`: Compile and run code in memory (default for dynamic generation)
+- `TCC_OUTPUT_EXE`: Generate an executable file
+- `TCC_OUTPUT_DLL`: Generate a dynamic library
+- `TCC_OUTPUT_OBJ`: Generate an object file
+- `TCC_OUTPUT_PREPROCESS`: Only preprocess the source code
+
+## Thread safety
+
+<Warning>
+The global TCC state is protected by semaphores for basic thread safety, but you should generally avoid using the same `TCCState` from multiple threads simultaneously. Create separate `TCCState` instances for concurrent compilation.
+</Warning>
+
+## Custom memory allocation
+
+You can provide a custom memory allocator using `tcc_set_realloc()` before creating any `TCCState` instances. This affects all memory allocation performed by TCC.
+
+## Error handling
+
+By default, errors and warnings are printed to stderr. You can set a custom error handler with `tcc_set_error_func()` to integrate TCC's diagnostics into your application's logging or UI.
+
+## Next steps
+
+- [Initialization](/api/initialization) - Learn how to create and configure a TCC compilation context
+- [Compilation](/api/compilation) - Compile C source code from strings or files
+- [Linking](/api/linking) - Link libraries and manage dependencies
+- [Execution](/api/execution) - Run compiled code or generate output files
+- [Symbols](/api/symbols) - Work with symbols and function pointers

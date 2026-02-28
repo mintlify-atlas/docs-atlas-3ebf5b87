@@ -1,0 +1,376 @@
+---
+title: Linking capabilities and output formats
+description: TinyCC's integrated linker with support for ELF, PE, and various output formats
+---
+
+TinyCC includes an integrated linker that can directly output relocatable ELF files, executable files, and dynamic libraries without relying on an external linker. This self-contained approach makes TCC uniquely portable and fast.
+
+## Output file generation
+
+TCC can directly generate multiple output formats without external tools.
+
+### ELF file generation
+
+<Info>
+TCC can directly output relocatable ELF files (object files), executable ELF files, and dynamic ELF libraries without an external linker.
+</Info>
+
+<CodeGroup>
+
+```bash Object files
+# Generate relocatable object file
+tcc -c file.c              # Creates file.o
+
+# Combine multiple files into one object
+tcc -r -o combined.o a.c b.c
+```
+
+```bash Executables
+# Generate executable
+tcc -o program main.c utils.c
+
+# Statically linked executable
+tcc -static -o program main.c
+```
+
+```bash Shared libraries
+# Generate shared library
+tcc -shared -o libmylib.so mylib.c
+
+# With soname for runtime linking
+tcc -shared -soname libmylib.so.1 -o libmylib.so.1.0 mylib.c
+```
+
+</CodeGroup>
+
+### PE-i386 file generation (Windows)
+
+TCC for Windows supports native Win32 executable formats:
+
+```bash
+# Console executable
+tcc -o program.exe main.c
+
+# GUI executable
+tcc -Wl,-subsystem=gui -o program.exe gui_app.c
+
+# DLL (Dynamic Link Library)
+tcc -shared -o mylib.dll mylib.c
+```
+
+<Note>
+For detailed Windows usage information, see `tcc-win32.txt` in the TCC distribution.
+</Note>
+
+## Linking behavior
+
+### Library linking
+
+TCC linker eliminates unreferenced object code in libraries:
+
+```bash
+# Link with libraries
+tcc -o program main.c -lm -lpthread
+
+# Specify library search paths
+tcc -o program main.c -L/opt/libs -lmylib
+
+# Link object files and libraries
+tcc -o program main.o utils.o -lm
+```
+
+<Warning>
+**Important limitation**: The linker does a single pass on object and library lists. Order matters! Libraries should come after the object files that use them. Grouping options (`--start-group` and `--end-group`) are not supported.
+</Warning>
+
+<Accordion title="Library linking order example">
+```bash
+# Correct order (library after objects that need it)
+tcc -o program main.o utils.o -lmath
+
+# Wrong order (may have undefined references)
+tcc -o program -lmath main.o utils.o
+
+# Multiple libraries (specify in dependency order)
+tcc -o program main.o -lhighlevel -llowlevel -lc
+```
+</Accordion>
+
+### File types
+
+TCC can load multiple input formats:
+
+- **ELF object files** (`.o`)
+- **Archives** (`.a` files) - static libraries
+- **Dynamic libraries** (`.so` files on Unix, `.dll` on Windows)
+- **Assembly files** (`.s` and `.S`)
+- **C source files** (`.c`)
+
+```bash
+# Mix different input types
+tcc -o program main.c utils.o libhelper.a -ldynamic
+```
+
+## Output format options
+
+TCC supports multiple output formats through linker options.
+
+### ELF variants
+
+<CodeGroup>
+
+```bash ELF 32-bit (default on i386)
+tcc -Wl,--oformat=elf32-i386 -o program main.c
+```
+
+```bash Binary image
+# Raw binary output (executable output only)
+tcc -Wl,--oformat=binary -o bootloader.bin boot.c
+```
+
+```bash COFF format
+# COFF output (TMS320C67xx target only)
+tcc -Wl,--oformat=coff -o program.coff main.c
+```
+
+</CodeGroup>
+
+<Info>
+The binary output format is useful for embedded systems, bootloaders, and firmware where you need a raw binary image without ELF headers.
+</Info>
+
+## Linker options
+
+### Basic options
+
+<Accordion title="Output control">
+```bash
+# Specify output file
+tcc -o myprogram main.c
+
+# Generate shared library
+tcc -shared -o libtest.so test.c
+
+# Generate relocatable object combining inputs
+tcc -r -o combined.o file1.c file2.c
+```
+</Accordion>
+
+<Accordion title="Library paths and linking">
+```bash
+# Add library search path
+tcc -L/usr/local/lib -lmylib main.c
+
+# Link with specific library
+tcc -lm -lpthread main.c
+
+# Set TCC internal library path
+tcc -B/opt/tcc/lib main.c
+```
+</Accordion>
+
+### Advanced linker options
+
+These options are passed to the linker with `-Wl,` prefix:
+
+<CodeGroup>
+
+```bash Static/dynamic control
+# Don't link with standard libraries
+tcc -nostdlib -o bare.elf bare.c
+
+# Don't search default library paths
+tcc -Wl,-nostdlib main.c
+
+# Static linking
+tcc -static -o program main.c
+```
+
+```bash Dynamic linking options
+# Export global symbols to dynamic linker
+tcc -rdynamic -o program main.c
+tcc -Wl,--export-dynamic -o program main.c
+
+# Export all symbols
+tcc -Wl,--export-all-symbols -o program main.c
+
+# Set custom dynamic linker (ELF interpreter)
+tcc -Wl,--dynamic-linker=/lib64/ld-linux-x86-64.so.2 main.c
+```
+
+```bash Runtime library paths
+# Set runtime library search path (rpath)
+tcc -Wl,-rpath=/opt/myapp/lib -o program main.c
+
+# Use new DT_RUNPATH instead of DT_RPATH
+tcc -Wl,--enable-new-dtags -Wl,-rpath=/opt/lib program.c
+```
+
+```bash Symbol control
+# Set soname for shared library
+tcc -shared -Wl,-soname=libmylib.so.1 -o libmylib.so.1.0 mylib.c
+
+# Set DT_SYMBOLIC tag
+tcc -Wl,-Bsymbolic -shared -o libtest.so test.c
+
+# Control whole archive inclusion
+tcc -Wl,--whole-archive -lstaticlib -Wl,--no-whole-archive main.c
+```
+
+</CodeGroup>
+
+### Windows-specific options
+
+```bash
+# Set Windows subsystem
+tcc -Wl,-subsystem=console -o app.exe main.c
+tcc -Wl,-subsystem=gui -o winapp.exe gui.c
+tcc -Wl,-subsystem=wince -o ceapp.exe ce.c
+
+# Modify executable layout
+tcc -Wl,-Ttext=0x400000 -o program.exe main.c
+tcc -Wl,-section-alignment=4096 -o program.exe main.c
+tcc -Wl,-file-alignment=512 -o program.exe main.c
+tcc -Wl,-image-base=0x10000000 -o dll.dll lib.c
+tcc -Wl,-stack=0x100000 -o program.exe main.c
+```
+
+## GNU Linker Scripts
+
+<Note>
+TCC's linker supports a subset of GNU ld scripts. This is necessary because many Linux systems use linker scripts for dynamic libraries (like `/usr/lib/libc.so`).
+</Note>
+
+### Supported commands
+
+<Accordion title="GROUP command">
+Group multiple libraries together:
+
+```ld
+/* GNU ld script example from /usr/lib/libc.so */
+GROUP ( /lib/libc.so.6 /usr/lib/libc_nonshared.a )
+```
+
+This allows using both shared and static libraries together.
+</Accordion>
+
+<Accordion title="FILE command">
+Specify individual files:
+
+```ld
+FILE ( /lib/x86_64-linux-gnu/libc.so.6 )
+```
+</Accordion>
+
+<Accordion title="OUTPUT_FORMAT and TARGET (ignored)">
+These commands are recognized but ignored:
+
+```ld
+OUTPUT_FORMAT(elf64-x86-64)
+TARGET(elf64-x86-64)
+```
+</Accordion>
+
+## Position Independent Code (PIC)
+
+<Warning>
+**Current limitation**: TCC does not generate position independent code (PIC) for dynamic libraries. This means:
+- Dynamic library code generated by TCC cannot be shared among processes
+- Each process gets its own copy of the library code in memory
+- This may increase memory usage when multiple processes use the same TCC-compiled shared library
+</Warning>
+
+```bash
+# This creates a shared library, but without PIC
+tcc -shared -o libtest.so test.c
+```
+
+## Practical examples
+
+### Building a complete application
+
+<CodeGroup>
+
+```bash Simple executable
+# Single file
+tcc -o hello hello.c
+
+# Multiple files
+tcc -o app main.c utils.c parser.c -lm
+```
+
+```bash Static library creation
+# Compile object files
+tcc -c lib1.c
+tcc -c lib2.c
+
+# Create archive with ar
+ar rcs libmylib.a lib1.o lib2.o
+
+# Link with the static library
+tcc -o program main.c -L. -lmylib
+```
+
+```bash Shared library creation
+# Create shared library
+tcc -shared -o libutils.so utils.c -lm
+
+# Use the shared library
+tcc -o program main.c -L. -lutils
+
+# Run with custom library path
+LD_LIBRARY_PATH=. ./program
+```
+
+```bash Cross-compilation
+# 32-bit binary on 64-bit system
+tcc -m32 -o program32 main.c
+
+# 64-bit binary
+tcc -m64 -o program64 main.c
+```
+
+</CodeGroup>
+
+### Advanced linking scenarios
+
+<Accordion title="Plugin system with dlopen">
+```c
+// Build main program with exported symbols
+tcc -rdynamic -o app main.c -ldl
+
+// Build plugin as shared library
+tcc -shared -o plugin.so plugin.c
+```
+
+The `-rdynamic` flag exports symbols so plugins can access them via `dlopen()`.
+</Accordion>
+
+<Accordion title="Embedded/bare metal">
+```bash
+# Create raw binary for embedded system
+tcc -nostdlib -Wl,--oformat=binary -Wl,-Ttext=0x8000 \
+    -o firmware.bin startup.S main.c
+
+# Custom linker script (partial support)
+tcc -nostdlib -o firmware.elf -Wl,-T,custom.ld main.c
+```
+</Accordion>
+
+## Platform support
+
+Linker capabilities by platform:
+
+| Platform | Object Files | Executables | Shared Libs | Notes |
+|----------|--------------|-------------|-------------|-------|
+| **Linux i386** | ELF32 | Yes | Yes | Full support |
+| **Linux x86_64** | ELF64 | Yes | Yes | Full support |
+| **Windows i386** | PE | EXE/DLL | DLL | Full support |
+| **Windows x86_64** | PE+ | EXE/DLL | DLL | Full support |
+| **ARM** | ELF32 | Yes | Yes | Supported |
+| **ARM64** | ELF64 | Yes | Yes | Supported |
+| **RISC-V** | ELF64 | Yes | Yes | Supported |
+
+<Tip>
+For best cross-platform compatibility, stick to standard library linking and avoid platform-specific linker scripts when possible.
+</Tip>

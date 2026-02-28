@@ -1,0 +1,445 @@
+---
+title: Inline assembly and assembler
+description: TinyCC's integrated assembler with GNU gas-like syntax and inline assembly support
+---
+
+Since version 0.9.16, TinyCC integrates its own assembler supporting GNU gas-like syntax. The assembler handles both standalone assembly files and inline assembly within C code.
+
+<Info>
+TCC's assembler enables you to write low-level code without requiring an external assembler, maintaining TCC's self-reliant philosophy.
+</Info>
+
+## Overview
+
+TinyCC Assembler is used to handle:
+
+- **`.S` files**: C preprocessed assembler source
+- **`.s` files**: Raw assembler source (no preprocessing)
+- **Inline assembly**: Using the `asm` or `__asm__` keyword in C code
+
+<Note>
+You can deactivate assembler support for a smaller TCC executable. The C compiler does not rely on the assembler.
+</Note>
+
+## Assembly syntax
+
+The TCC assembler supports most of the GNU as (gas) syntax with a few differences.
+
+### Tokens and comments
+
+```asm
+# This is a comment
+// C++ style comments also work
+/* C style comments work too */
+
+mov %eax, %ebx  # Move ebx to eax
+```
+
+<Accordion title="Identifier restrictions">
+Identifiers follow C rules:
+- Cannot use `.` or `$` in identifiers (unlike gas)
+- Must start with a letter or underscore
+- Can contain letters, numbers, and underscores
+
+```asm
+my_label:        # Valid
+_start:          # Valid
+loop.1:          # Invalid (contains .)
+temp$var:        # Invalid (contains $)
+```
+</Accordion>
+
+### Number formats
+
+```asm
+mov $42, %eax       # Decimal
+mov $0x2A, %eax     # Hexadecimal
+mov $052, %eax      # Octal
+```
+
+<Warning>
+Only 32-bit integer numbers are supported in expressions.
+</Warning>
+
+## Expressions
+
+### Operators
+
+<Accordion title="Unary operators">
+```asm
+mov $+10, %eax      # Positive (unary +)
+mov $-10, %eax      # Negative (unary -)
+mov $~0xFF, %eax    # Bitwise NOT
+```
+</Accordion>
+
+<Accordion title="Binary operators (by precedence)">
+**Highest precedence:**
+```asm
+mov $(4 * 5), %eax     # Multiplication
+mov $(20 / 4), %eax    # Division
+mov $(17 % 5), %eax    # Modulo
+```
+
+**Medium precedence:**
+```asm
+mov $(0xFF & 0x0F), %eax    # Bitwise AND
+mov $(0xF0 | 0x0F), %eax    # Bitwise OR
+mov $(0xFF ^ 0x0F), %eax    # Bitwise XOR
+```
+
+**Lowest precedence:**
+```asm
+mov $(label + 4), %eax      # Addition
+mov $(label2 - label1), %eax # Subtraction
+```
+</Accordion>
+
+### Label arithmetic
+
+<Info>
+All operators accept absolute values except `+` and `-`. These can add offsets to labels or compute differences between labels in the same section.
+</Info>
+
+```asm
+.text
+start:
+    nop
+end:
+    mov $(end - start), %eax  # Size of code between labels
+    mov $(buffer + 16), %edx  # Address offset
+```
+
+## Labels
+
+### Named labels
+
+```asm
+.globl main
+main:
+    push %ebp
+    mov %esp, %ebp
+    # Function code
+    leave
+    ret
+
+local_label:
+    # Local code
+    ret
+```
+
+<Note>
+All labels are considered local by default, except undefined ones.
+</Note>
+
+### Numeric labels
+
+Numeric labels can be defined multiple times and referenced with `b` (backward) or `f` (forward):
+
+```asm
+1:
+    cmp %eax, %ebx
+    jne 1f          # Jump forward to next "1:" label
+    inc %eax
+    jmp 1b          # Jump backward to previous "1:" label
+1:
+    ret
+```
+
+<Tip>
+Numeric labels are useful for local jumps within a function without polluting the namespace.
+</Tip>
+
+## Directives
+
+All directives are preceded by a `.` character.
+
+### Data definition
+
+<CodeGroup>
+
+```asm Byte and word data
+.byte 0x10, 0x20, 0x30      # Define bytes
+.word 0x1234, 0x5678        # Define words (2 bytes)
+.short 100, 200             # Define shorts (2 bytes)
+```
+
+```asm Integer data
+.int 0x12345678             # Define int (4 bytes)
+.long 1000000               # Define long (4 bytes)
+.quad 0x123456789ABCDEF0    # Define quad (8 bytes, x86_64)
+```
+
+```asm String data
+.string "Hello, World!\n"   # Null-terminated string
+.asciz "Same as string\n"  # Null-terminated string
+.ascii "No null byte"       # Raw string (no null terminator)
+```
+
+</CodeGroup>
+
+### Alignment and spacing
+
+<Accordion title=".align and .balign">
+Align to a power-of-two boundary:
+
+```asm
+.align 16           # Align to 16-byte boundary
+.align 8, 0x90      # Align to 8 bytes, fill with 0x90 (NOP)
+.balign 4           # Same as .align 4
+```
+</Accordion>
+
+<Accordion title=".p2align">
+Align using power-of-two exponent:
+
+```asm
+.p2align 3          # Align to 2^3 = 8 bytes
+.p2align 4, 0x90    # Align to 16 bytes, fill with 0x90
+```
+</Accordion>
+
+<Accordion title=".skip and .space">
+Reserve space:
+
+```asm
+.skip 10            # Skip 10 bytes (filled with 0)
+.skip 16, 0xFF      # Skip 16 bytes filled with 0xFF
+.space 100          # Reserve 100 bytes
+```
+</Accordion>
+
+<Accordion title=".fill">
+Repeat a pattern:
+
+```asm
+.fill 10, 4, 0x12345678    # Repeat 0x12345678 (4 bytes) 10 times
+.fill 5, 1, 0xAA           # Repeat 0xAA (1 byte) 5 times
+```
+</Accordion>
+
+### Section control
+
+<CodeGroup>
+
+```asm Standard sections
+.text               # Switch to code section
+.data               # Switch to initialized data section
+.bss                # Switch to uninitialized data section
+```
+
+```asm Custom sections
+.section .rodata    # Read-only data section
+.section .init      # Initialization section
+.section .fini      # Finalization section
+```
+
+```asm Section with flags
+.section .mydata, "aw"   # Allocatable, writable
+.section .mycode, "ax"   # Allocatable, executable
+```
+
+```asm Section stack
+.pushsection .temp  # Save current section, switch to .temp
+    # Code in .temp section
+.popsection         # Restore previous section
+
+.previous           # Return to previous section
+```
+
+</CodeGroup>
+
+### Symbol visibility
+
+```asm
+.globl symbol_name  # Make symbol visible externally
+.global main        # Same as .globl
+.weak weak_symbol   # Declare weak symbol
+.hidden int_func    # Hide symbol (not exported)
+```
+
+### Advanced directives
+
+<Accordion title=".org - Set location counter">
+```asm
+.org 0x1000         # Set address to 0x1000
+    # Code at absolute address 0x1000
+```
+
+<Warning>
+The `.org` directive can only move forward and must stay within reasonable bounds (0 to 0x100000).
+</Warning>
+</Accordion>
+
+<Accordion title=".rept and .endr - Repeat block">
+```asm
+.rept 4
+    nop             # Repeat 4 NOPs
+.endr
+
+.rept 3
+    push %eax
+    call function
+    pop %eax
+.endr
+```
+</Accordion>
+
+<Accordion title=".set - Define symbol">
+```asm
+.set BUFFER_SIZE, 1024
+.set MAX_ITEMS, 100
+
+mov $BUFFER_SIZE, %eax
+```
+</Accordion>
+
+## X86 assembly
+
+All x86 opcodes are supported with **ATT syntax** (source then destination operand order).
+
+### Syntax differences
+
+<CodeGroup>
+
+```asm ATT syntax (TCC)
+mov %eax, %ebx      # Move eax to ebx (source, dest)
+add $10, %eax       # Add 10 to eax
+mov (%ebx), %eax    # Load from address in ebx
+```
+
+```asm Intel syntax (not supported)
+mov ebx, eax        # This is Intel syntax
+add eax, 10         # Not compatible with TCC
+mov eax, [ebx]      # Use ATT syntax instead
+```
+
+</CodeGroup>
+
+### Size suffixes
+
+```asm
+movb $0x42, %al     # Move byte
+movw $0x1234, %ax   # Move word
+movl $0x12345678, %eax  # Move long (32-bit)
+
+# TCC can infer size from operands:
+mov $10, %eax       # Inferred as movl
+mov %al, %bl        # Inferred as movb
+```
+
+### Addressing modes
+
+<CodeGroup>
+
+```asm Register direct
+mov %eax, %ebx
+```
+
+```asm Immediate
+mov $100, %eax
+```
+
+```asm Register indirect
+mov (%ebx), %eax
+```
+
+```asm Base + displacement
+mov 4(%ebx), %eax       # [ebx + 4]
+mov -8(%ebp), %eax      # [ebp - 8]
+```
+
+```asm Base + index
+mov (%ebx,%esi), %eax   # [ebx + esi]
+```
+
+```asm Complex (base + index*scale + disp)
+mov 16(%ebx,%esi,4), %eax   # [ebx + esi*4 + 16]
+```
+
+</CodeGroup>
+
+## Inline assembly in C
+
+TCC supports GCC-style inline assembly with full constraint syntax.
+
+### Basic inline assembly
+
+```c
+int main() {
+    __asm__("nop");                    // Single instruction
+    __asm__("mov $1, %eax\n\t"        // Multiple instructions
+            "xor %ebx, %ebx");
+    return 0;
+}
+```
+
+### Extended inline assembly
+
+```c
+static inline int atomic_add(int *ptr, int value) {
+    int result;
+    __asm__ __volatile__(
+        "lock; xaddl %0, %1"
+        : "=r" (result), "+m" (*ptr)
+        : "0" (value)
+        : "memory"
+    );
+    return result;
+}
+```
+
+### Constraint examples
+
+<CodeGroup>
+
+```c Output operands
+int result;
+__asm__("movl %%eax, %0" : "=r" (result));
+// "=r" means write-only register
+// "+r" means read-write register
+```
+
+```c Input operands
+int x = 10, y = 20;
+__asm__("addl %1, %0" : "+r" (x) : "r" (y));
+// x = x + y
+```
+
+```c Named operands (GCC 3.x)
+int a, b, c;
+__asm__("addl %[input2], %[input1]\n\t"
+        "movl %[input1], %[output]"
+        : [output] "=r" (c)
+        : [input1] "r" (a), [input2] "r" (b));
+```
+
+</CodeGroup>
+
+<Info>
+TCC generates the assembly code directly without intermediate files and supports GCC 3.x named operands for better readability.
+</Info>
+
+## Limitations
+
+<Warning>
+**Currently not supported:**
+- SSE instructions (MMX opcodes are supported)
+- Intel syntax (only ATT syntax)
+- 64-bit operand sizes in 32-bit mode
+- Some advanced gas directives
+</Warning>
+
+## Platform support
+
+The assembler is available on:
+
+- **i386**: Full support (Linux and Windows)
+- **x86_64**: Full support (Linux and Windows)  
+- **ARM**: Supported
+- **ARM64**: Supported
+- **RISC-V**: Supported
+
+<Tip>
+For cross-platform code, use C with inline assembly only when necessary for performance-critical or hardware-specific operations.
+</Tip>

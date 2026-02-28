@@ -1,0 +1,128 @@
+---
+title: Introduction to TinyCC
+description: The smallest and fastest ANSI C compiler for scripting everywhere
+---
+
+# Introduction to TinyCC
+
+TinyCC (also known as TCC) is a small but hyper-fast C compiler. Unlike other C compilers, it is self-relying—you don't need an external assembler or linker because TCC does that for you.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Get TinyCC running on Linux, BSD, macOS, or Windows
+  </Card>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Compile and run your first C program in seconds
+  </Card>
+  <Card title="Command line" icon="terminal" href="/cli/command-reference">
+    Learn TCC command line options and usage
+  </Card>
+  <Card title="C scripting" icon="scroll" href="/cli/scripting">
+    Run C code like shell scripts with shebang support
+  </Card>
+</CardGroup>
+
+## Why TinyCC?
+
+### Small
+
+You can compile and execute C code everywhere, even on rescue disks. TCC's tiny footprint makes it ideal for embedded systems, minimal environments, and situations where disk space is limited.
+
+### Fast
+
+TCC generates machine code for i386, x86_64, ARM, AArch64, and RISC-V. It compiles and links **about 10 times faster than `gcc -O0`**. For many projects, compilation is so fast that you don't even need Makefiles.
+
+<CodeGroup>
+```bash Traditional compilation
+# Typical GCC workflow
+gcc -O0 hello.c -o hello
+time: 0.5s
+```
+
+```bash TCC compilation
+# Same code with TCC
+tcc hello.c -o hello
+time: 0.05s
+```
+</CodeGroup>
+
+### Unlimited
+
+Any C dynamic library can be used directly. TCC supports ANSI C, most of ISO C99, and many GNU C extensions including inline assembly. TCC can even compile itself.
+
+### Safe
+
+TCC includes an optional memory and bounds checker. Bounds-checked code can be mixed freely with standard code, and checks work even with unpatched libraries.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Direct execution" icon="play">
+    Compile and execute C source directly without linking or assembly steps
+  </Card>
+  <Card title="C scripting" icon="file-code">
+    Add `#!/usr/local/bin/tcc -run` to your C source and execute it like a shell script
+  </Card>
+  <Card title="Full preprocessor" icon="code">
+    Complete C preprocessor included with macro support
+  </Card>
+  <Card title="Dynamic code generation" icon="gear">
+    Use `libtcc` as a backend for runtime code generation
+  </Card>
+  <Card title="Multi-architecture" icon="microchip">
+    Supports i386, x86_64, ARM, AArch64, and RISC-V architectures
+  </Card>
+  <Card title="Bounds checking" icon="shield">
+    Automatic memory and bounds checking for safer code
+  </Card>
+</CardGroup>
+
+## Use cases
+
+<Steps>
+  <Step title="Rapid prototyping">
+    Get instant feedback on your C code without waiting for slow compilation cycles. Perfect for learning C or testing algorithms.
+  </Step>
+  
+  <Step title="C scripting">
+    Write system utilities and automation scripts in C instead of shell or Python. Get the performance of C with the convenience of scripting.
+  </Step>
+  
+  <Step title="Embedded development">
+    Deploy a complete C compiler on resource-constrained systems where larger toolchains won't fit.
+  </Step>
+  
+  <Step title="Build-free development">
+    Skip complex build systems and Makefiles. Just run your code directly during development.
+  </Step>
+</Steps>
+
+<Note>
+TCC aims for full ISO C99 compliance and includes many GNU C extensions. It can compile standard C code that works with GCC or Clang.
+</Note>
+
+## Platform support
+
+TinyCC runs on:
+- **Linux** (all major distributions)
+- **BSD variants** (FreeBSD, OpenBSD, NetBSD)
+- **macOS** (Intel and Apple Silicon)
+- **Windows** (native Win32 support)
+
+Target architectures:
+- i386 (32-bit x86)
+- x86_64 (64-bit x86)
+- ARM (32-bit)
+- AArch64 (64-bit ARM)
+- RISC-V (64-bit)
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Install TinyCC" icon="download" href="/installation">
+    Follow the installation guide for your platform
+  </Card>
+  <Card title="Try the quick start" icon="rocket" href="/quickstart">
+    Compile and run your first program in under a minute
+  </Card>
+</CardGroup>

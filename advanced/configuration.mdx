@@ -1,0 +1,599 @@
+---
+title: Build configuration
+description: Configure and customize TinyCC compilation with build options and settings
+---
+
+TinyCC provides extensive configuration options to customize the compiler for different platforms, targets, and use cases.
+
+## Configuration script
+
+The `configure` script detects your system and sets appropriate defaults:
+
+```bash
+./configure [options]
+make
+sudo make install
+```
+
+<Tip>
+Run `./configure --help` to see all available options.
+</Tip>
+
+## Installation paths
+
+Customize where TinyCC is installed:
+
+<Steps>
+
+<Step title="Set installation prefix">
+
+```bash
+# Install to /usr/local (default)
+./configure --prefix=/usr/local
+
+# Install to custom location
+./configure --prefix=/opt/tcc
+
+# Install to user directory
+./configure --prefix=$HOME/.local
+```
+
+</Step>
+
+<Step title="Configure specific directories">
+
+```bash
+./configure \
+  --prefix=/usr \
+  --exec-prefix=/usr \
+  --bindir=/usr/bin \
+  --libdir=/usr/lib \
+  --includedir=/usr/include \
+  --mandir=/usr/share/man \
+  --infodir=/usr/share/info
+```
+
+</Step>
+
+<Step title="Set TCC directory">
+
+The TCC directory contains headers, libraries, and runtime files:
+
+```bash
+# Default: PREFIX/lib/tcc
+./configure --tccdir=/usr/lib/tcc
+
+# Custom location
+./configure --tccdir=/opt/tcc/lib
+```
+
+</Step>
+
+</Steps>
+
+## Compiler selection
+
+Configure which compiler builds TinyCC:
+
+<CodeGroup>
+
+```bash GCC
+# Use GCC (default on Linux)
+./configure --cc=gcc
+```
+
+```bash Clang
+# Use Clang
+./configure --cc=clang
+```
+
+```bash TCC
+# Bootstrap: use TCC to compile TCC
+./configure --cc=tcc
+```
+
+</CodeGroup>
+
+### Additional compiler flags
+
+```bash
+# Add custom CFLAGS
+./configure --extra-cflags="-O3 -march=native"
+
+# Add custom LDFLAGS
+./configure --extra-ldflags="-static"
+
+# Add extra libraries
+./configure --extra-libs="-lmylib"
+```
+
+## Target configuration
+
+### Cross-compilation setup
+
+Configure TinyCC for cross-compilation:
+
+```bash
+# Enable cross-compiler builds
+./configure --enable-cross
+
+# Specify target CPU
+./configure --cpu=arm64
+
+# Specify target OS
+./configure --targetos=Darwin
+
+# Set cross-compilation prefix
+./configure --cross-prefix=aarch64-linux-gnu-
+```
+
+### Platform-specific examples
+
+<CodeGroup>
+
+```bash ARM64 Linux
+./configure \
+  --cpu=arm64 \
+  --cross-prefix=aarch64-linux-gnu- \
+  --enable-cross
+```
+
+```bash Windows (MinGW)
+./configure \
+  --targetos=WIN32 \
+  --cross-prefix=x86_64-w64-mingw32-
+```
+
+```bash Android/Termux
+./configure \
+  --cpu=arm64 \
+  --targetos=Android \
+  --prefix=/data/data/com.termux/files/usr
+```
+
+```bash macOS
+./configure \
+  --cpu=x86_64 \
+  --targetos=Darwin
+```
+
+</CodeGroup>
+
+## Library configuration
+
+### System paths
+
+Specify system include and library paths:
+
+```bash
+./configure \
+  --sysroot=/usr/arm-linux-gnueabihf \
+  --sysincludepaths=/usr/arm-linux-gnueabihf/include \
+  --libpaths=/usr/arm-linux-gnueabihf/lib \
+  --crtprefix=/usr/arm-linux-gnueabihf/lib
+```
+
+<Note>
+Use colon-separated paths for multiple directories: `--libpaths=/lib:/usr/lib:/opt/lib`
+</Note>
+
+### ELF interpreter
+
+Set the dynamic linker path:
+
+```bash
+# Standard Linux
+./configure --elfinterp=/lib64/ld-linux-x86-64.so.2
+
+# musl libc
+./configure --elfinterp=/lib/ld-musl-x86_64.so.1
+
+# FreeBSD
+./configure --elfinterp=/libexec/ld-elf.so.1
+```
+
+### Triplet configuration
+
+Set the system library triplet:
+
+```bash
+# x86_64 Linux
+./configure --triplet=x86_64-linux-gnu
+
+# ARM hard float
+./configure --triplet=arm-linux-gnueabihf
+
+# ARM64 Linux
+./configure --triplet=aarch64-linux-gnu
+```
+
+## Feature configuration
+
+### Debug features
+
+<CodeGroup>
+
+```bash Backtrace
+# Enable backtrace support (default)
+./configure
+
+# Disable backtrace support
+./configure --config-backtrace=no
+```
+
+```bash Bounds checking
+# Enable bounds checking (default)
+./configure
+
+# Disable bounds checking
+./configure --config-bcheck=no
+```
+
+```bash DWARF
+# Use DWARF debug info (version 2-5)
+./configure --config-dwarf=4
+./configure --config-dwarf=5
+
+# Use STABS (default)
+./configure
+```
+
+```bash Debug build
+# Build TCC with debug symbols
+./configure --debug
+```
+
+</CodeGroup>
+
+### Library options
+
+```bash
+# Use libgcc instead of libtcc1.a
+./configure --with-libgcc
+
+# Use mmap for executable memory (with SELinux)
+./configure --with-selinux
+
+# Build as static library (Windows default)
+./configure --enable-static
+
+# Build as shared library (Unix default)
+./configure --disable-static
+
+# Disable rpath in shared library
+./configure --disable-rpath
+```
+
+### Platform-specific options
+
+<CodeGroup>
+
+```bash macOS
+# Force old Mach-O format (macOS ≤ 10)
+./configure --config-new_macho=no
+
+# Use new Mach-O format (macOS ≥ 11)
+./configure --config-new_macho=yes
+
+# Enable code signing
+./configure --config-codesign=yes
+```
+
+```bash Linux
+# Use new ELF DTAGs (DT_RUNPATH instead of DT_RPATH)
+./configure --config-new_dtags=yes
+
+# Generate position-independent executables
+./configure --config-pie
+```
+
+```bash uClibc
+# Configure for uClibc
+./configure --config-uClibc
+```
+
+```bash musl
+# Configure for musl libc
+./configure --config-musl
+```
+
+</CodeGroup>
+
+## Build options
+
+Control the build process:
+
+### Build targets
+
+```bash
+# Build native compiler only
+make
+
+# Build cross-compilers
+make cross
+
+# Build specific cross-compiler
+make cross-x86_64
+make cross-arm64
+
+# Build documentation
+make doc
+
+# Build everything
+make all
+```
+
+### Build flags
+
+```bash
+# Build from single source file (faster, smaller)
+make ONE_SOURCE=yes
+
+# Build from separate object files (default)
+make ONE_SOURCE=no
+
+# Silent build
+make SILENT=yes
+
+# Verbose build
+make SILENT=no
+```
+
+## Runtime configuration
+
+### TCC switches
+
+Set default switches passed to TCC:
+
+```bash
+# Add default switches
+./configure --tcc-switches="-Wl,-rpath=/opt/lib"
+
+# Multiple switches
+./configure --tcc-switches="-I/opt/include -L/opt/lib"
+```
+
+### Environment variables
+
+TCC respects these environment variables:
+
+```bash
+# Include paths
+export C_INCLUDE_PATH="/opt/include:/usr/local/include"
+export CPATH="/opt/include"
+
+# Library paths
+export LIBRARY_PATH="/opt/lib:/usr/local/lib"
+
+# Dynamic linker override
+export LD_SO="/lib/ld-linux-x86-64.so.2"
+```
+
+## Advanced configuration
+
+### Custom configuration file
+
+Create `config-extra.mak` for custom settings:
+
+```makefile
+# Custom configuration for cross-compilation
+
+# ARM64 configuration
+ROOT-arm64 = /usr/aarch64-linux-gnu
+CRT-arm64  = {R}/lib
+LIB-arm64  = {B}:{R}/lib
+INC-arm64  = {B}/include:{R}/include
+DEF-arm64  += -D__linux__
+
+# RISC-V configuration
+TRIPLET-riscv64 = riscv64-linux-gnu
+ROOT-riscv64 = /usr/riscv64-linux-gnu
+
+# Custom CFLAGS for profiling build
+CFLAGS_P = $(CFLAGS) -pg -static -DTCC_PROFILE
+```
+
+<Tip>
+The makefile automatically includes `config-extra.mak` if present. Use `{B}` for TCC directory and `{R}` for sysroot.
+</Tip>
+
+### Predefined macros
+
+Control how TCC handles predefined macros:
+
+```bash
+# Don't compile tccdefs.h (include at runtime)
+./configure --config-predefs=no
+
+# Compile tccdefs.h into TCC (default, faster)
+./configure
+```
+
+## Configuration examples
+
+### Minimal build
+
+Smallest possible TCC:
+
+```bash
+./configure \
+  --config-backtrace=no \
+  --config-bcheck=no \
+  --prefix=/opt/tcc-minimal
+make
+```
+
+### Development build
+
+For TinyCC development:
+
+```bash
+./configure \
+  --debug \
+  --config-dwarf=5 \
+  --prefix=$HOME/.local
+make
+```
+
+### Production cross-compiler
+
+Full-featured cross-compiler setup:
+
+```bash
+./configure \
+  --prefix=/opt/tcc \
+  --enable-cross \
+  --config-dwarf=4 \
+  --extra-cflags="-O2"
+make
+make cross
+sudo make install
+```
+
+### Static build
+
+Statically linked TCC:
+
+```bash
+./configure \
+  --prefix=/opt/tcc-static \
+  --extra-ldflags="-static" \
+  --config-libgcc=yes
+make
+```
+
+## Verifying configuration
+
+Check configuration after running configure:
+
+```bash
+# View generated configuration
+cat config.mak
+cat config.h
+
+# Test TCC version
+./tcc -v
+
+# Show TCC search paths
+./tcc -vv
+
+# Print configured directories
+./tcc -print-search-dirs
+```
+
+## Makefile targets
+
+Available make targets:
+
+<CodeGroup>
+
+```bash Build
+# Build native TCC
+make
+
+# Build cross-compilers
+make cross
+
+# Build documentation
+make doc
+
+# Build specific cross-compiler
+make cross-arm64
+```
+
+```bash Install
+# Install everything
+make install
+
+# Install stripped binaries
+make install-strip
+
+# Uninstall
+make uninstall
+```
+
+```bash Test
+# Run all tests
+make test
+
+# Run specific test suite
+make tests2.all
+make testspp.all
+
+# Test installed TCC
+make test-install
+```
+
+```bash Clean
+# Clean build files
+make clean
+
+# Remove all generated files
+make distclean
+```
+
+</CodeGroup>
+
+## Build architecture
+
+### Supported build architectures
+
+TinyCC can be built on:
+
+- **i386** - 32-bit x86 (Linux, Windows)
+- **x86_64** - 64-bit x86 (Linux, Windows, macOS, BSD)
+- **ARM** - 32-bit ARM (Linux, BSD)
+- **ARM64** - 64-bit ARM (Linux, macOS, BSD)
+- **RISC-V 64** - 64-bit RISC-V (Linux)
+
+### Architecture detection
+
+The configure script auto-detects your CPU:
+
+```bash
+# Auto-detect (default)
+./configure
+
+# Override detection
+./configure --cpu=x86_64
+./configure --cpu=arm64
+./configure --cpu=riscv64
+```
+
+## Troubleshooting
+
+### Configuration fails
+
+<Warning>
+**Common configuration errors**:
+
+- Missing compiler: Install GCC or Clang
+- Missing headers: Install build-essential or development packages
+- Cross-compilation errors: Install cross-compiler toolchain
+- Permission denied: Use `sudo` for system-wide installation
+</Warning>
+
+### Fixing configuration issues
+
+```bash
+# Clean configuration
+make distclean
+
+# Reconfigure with verbose output
+./configure --help
+./configure [options]
+
+# Check compiler availability
+which gcc
+which clang
+
+# Verify paths exist
+ls -la /usr/local/include
+ls -la /usr/local/lib
+```
+
+## See also
+
+- [Cross-compilation](/advanced/cross-compilation) - Cross-compiling for different architectures
+- [Debugging](/advanced/debugging) - Debug configuration options
+- [Quickstart](/quickstart) - Getting started with TinyCC

@@ -1,0 +1,322 @@
+---
+title: Cross-compilation
+description: Cross-compiling TinyCC programs for different architectures and platforms
+---
+
+TinyCC supports cross-compilation for multiple target architectures, allowing you to build executables for different platforms from a single development environment.
+
+## Supported architectures
+
+TinyCC can cross-compile for the following target architectures:
+
+- **i386** - 32-bit x86 (Linux, Windows)
+- **x86_64** - 64-bit x86 (Linux, Windows, macOS)
+- **ARM** - 32-bit ARM (Linux, Windows CE)
+- **ARM64** - 64-bit ARM/AArch64 (Linux, macOS, BSD)
+- **RISC-V 64** - 64-bit RISC-V (Linux)
+
+<Note>
+Cross-compilation support varies by host platform. Not all target architectures can be built from all host systems.
+</Note>
+
+## Building cross-compilers
+
+<Steps>
+
+<Step title="Enable cross-compilation during configuration">
+
+When configuring TinyCC, enable cross-compiler builds:
+
+```bash
+./configure --enable-cross
+```
+
+This enables building all supported cross-compilers.
+
+</Step>
+
+<Step title="Build all cross-compilers">
+
+Build all cross-compilers and their runtime libraries:
+
+```bash
+make cross
+```
+
+This creates executables like `i386-tcc`, `x86_64-tcc`, `arm-tcc`, `arm64-tcc`, and `riscv64-tcc`.
+
+</Step>
+
+<Step title="Build specific cross-compiler (optional)">
+
+To build only a specific cross-compiler:
+
+```bash
+make cross-x86_64
+make cross-arm64
+make cross-riscv64
+```
+
+</Step>
+
+<Step title="Install cross-compilers">
+
+Install the cross-compilers to your system:
+
+```bash
+sudo make install
+```
+
+</Step>
+
+</Steps>
+
+## Using cross-compilers
+
+### Basic cross-compilation
+
+Use the architecture-specific TCC binary to cross-compile:
+
+```bash
+# Compile for x86_64 Linux
+x86_64-tcc -o program program.c
+
+# Compile for ARM Linux
+arm-tcc -o program program.c
+
+# Compile for ARM64 Linux
+arm64-tcc -o program program.c
+```
+
+### Target-specific switches
+
+<CodeGroup>
+
+```bash x86_64
+# Cross-compile for 64-bit x86 (from 32-bit host)
+tcc -m64 -o program program.c
+```
+
+```bash i386
+# Cross-compile for 32-bit x86 (from 64-bit host)
+tcc -m32 -o program program.c
+```
+
+```bash ARM
+# ARM with soft float ABI
+arm-tcc -mfloat-abi=softfp -o program program.c
+
+# ARM with hard float ABI
+arm-tcc -mfloat-abi=hard -o program program.c
+```
+
+```bash Windows
+# Cross-compile for Windows from Linux
+i386-win32-tcc -o program.exe program.c
+x86_64-win32-tcc -o program.exe program.c
+```
+
+</CodeGroup>
+
+## Platform-specific targets
+
+### Windows (PE) executables
+
+Cross-compile Windows executables from Linux:
+
+```bash
+# 32-bit Windows executable
+i386-win32-tcc -o hello.exe hello.c
+
+# 64-bit Windows executable
+x86_64-win32-tcc -o hello.exe hello.c
+
+# Windows DLL
+i386-win32-tcc -shared -o mylib.dll mylib.c
+```
+
+### macOS (Mach-O) executables
+
+Cross-compile macOS binaries:
+
+```bash
+# 64-bit x86 macOS
+x86_64-osx-tcc -o program program.c
+
+# ARM64 macOS (Apple Silicon)
+arm64-osx-tcc -o program program.c
+```
+
+### ARM platforms
+
+<CodeGroup>
+
+```bash Linux
+# Standard ARM Linux
+arm-tcc -o program program.c
+
+# ARM64 Linux
+arm64-tcc -o program program.c
+```
+
+```bash Android
+# ARM Android (requires Android NDK paths)
+arm-tcc -o program program.c \
+  --sysroot=/path/to/android/sysroot
+```
+
+```bash Windows CE
+# ARM Windows CE
+arm-wince-tcc -o program.exe program.c
+```
+
+```bash BSD
+# ARM64 on FreeBSD
+arm64-tcc -DTARGETOS_FreeBSD -o program program.c
+
+# ARM64 on NetBSD
+arm64-tcc -DTARGETOS_NetBSD -o program program.c
+
+# ARM64 on OpenBSD
+arm64-tcc -DTARGETOS_OpenBSD -o program program.c
+```
+
+</CodeGroup>
+
+## Configuration options
+
+### System root and include paths
+
+Specify custom system root and library paths for cross-compilation:
+
+```bash
+./configure \
+  --cpu=arm64 \
+  --cross-prefix=aarch64-linux-gnu- \
+  --sysroot=/usr/aarch64-linux-gnu \
+  --sysincludepaths=/usr/aarch64-linux-gnu/include \
+  --libpaths=/usr/aarch64-linux-gnu/lib \
+  --crtprefix=/usr/aarch64-linux-gnu/lib
+```
+
+### Triplet configuration
+
+Set the target triplet for library and include directory detection:
+
+```bash
+./configure \
+  --cpu=x86_64 \
+  --triplet=x86_64-linux-gnu
+
+./configure \
+  --cpu=arm \
+  --triplet=arm-linux-gnueabihf
+```
+
+<Tip>
+The triplet configuration helps TCC automatically locate system libraries and headers in multiarch systems.
+</Tip>
+
+## Runtime library (libtcc1.a)
+
+Each cross-compiler requires its own runtime library:
+
+```bash
+# Build runtime for specific target
+make arm64-libtcc1.a
+make x86_64-libtcc1.a
+make riscv64-libtcc1.a
+
+# Runtime libraries are automatically built with 'make cross'
+```
+
+The runtime library provides:
+- Integer division and modulo operations
+- 64-bit integer operations on 32-bit platforms
+- Floating-point operations
+- Memory operations (memset, memcpy)
+
+## Limitations
+
+<Warning>
+**Cross-compilation limitations**:
+
+- Host and target endianness must match (big-endian to big-endian, little-endian to little-endian)
+- Position-independent code (PIC) for shared libraries may have limitations on some targets
+- Some platform-specific features may require native compilation
+- Windows cross-compilation from Linux requires mingw headers
+</Warning>
+
+## Advanced cross-compilation
+
+### Custom cross-compiler configuration
+
+Create `config-extra.mak` to customize cross-compiler paths:
+
+```makefile
+# Custom ARM64 configuration
+ROOT-arm64 = /usr/aarch64-linux-gnu
+CRT-arm64  = {R}/lib
+LIB-arm64  = {B}:{R}/lib
+INC-arm64  = {B}/include:{R}/include
+DEF-arm64  += -D__linux__
+
+# Custom RISC-V configuration  
+TRIPLET-riscv64 = riscv64-linux-gnu
+ROOT-riscv64 = /usr/riscv64-linux-gnu
+```
+
+<Tip>
+TCC replaces `{B}` with the TCC directory and `{R}` with `CONFIG_SYSROOT`.
+</Tip>
+
+### Multiple target builds
+
+Build for multiple targets in sequence:
+
+```bash
+# Build for multiple architectures
+for arch in i386 x86_64 arm arm64 riscv64; do
+  ${arch}-tcc -o program-${arch} program.c
+done
+```
+
+## Troubleshooting
+
+### Missing headers or libraries
+
+If cross-compilation fails due to missing headers:
+
+```bash
+# Install multiarch support (Debian/Ubuntu)
+sudo apt-get install gcc-arm-linux-gnueabihf
+sudo apt-get install gcc-aarch64-linux-gnu
+sudo apt-get install gcc-riscv64-linux-gnu
+
+# Install mingw for Windows cross-compilation
+sudo apt-get install mingw-w64
+```
+
+### Testing cross-compiled binaries
+
+Test cross-compiled binaries using QEMU:
+
+```bash
+# Install QEMU user-mode emulation
+sudo apt-get install qemu-user
+
+# Run ARM binary
+qemu-arm -L /usr/arm-linux-gnueabihf ./program-arm
+
+# Run ARM64 binary
+qemu-aarch64 -L /usr/aarch64-linux-gnu ./program-arm64
+
+# Run RISC-V binary
+qemu-riscv64 -L /usr/riscv64-linux-gnu ./program-riscv64
+```
+
+## See also
+
+- [Configuration](/advanced/configuration) - Build configuration and customization
+- [Debugging](/advanced/debugging) - Debug cross-compiled binaries
+- [Quickstart](/quickstart) - Getting started with TinyCC

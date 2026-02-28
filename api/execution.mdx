@@ -1,0 +1,444 @@
+---
+title: Execution
+description: Running compiled code in memory and managing relocations
+---
+
+After compilation and linking, you can either run the code in memory or generate an output file.
+
+## Memory relocation
+
+### tcc_relocate
+
+Performs all relocations needed to run the compiled code in memory. This must be called before using `tcc_get_symbol()`.
+
+```c
+int tcc_relocate(TCCState *s);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success, negative value on error.
+</ResponseField>
+
+**Example:**
+
+```c
+if (tcc_relocate(s) < 0) {
+    fprintf(stderr, "Relocation failed\n");
+    return 1;
+}
+
+// Now you can get symbols
+void (*func)(void) = tcc_get_symbol(s, "my_function");
+```
+
+<Warning>
+**Do not** call `tcc_relocate()` if you're using `tcc_output_file()` or `tcc_run()`. Those functions handle relocation internally.
+</Warning>
+
+## Running code directly
+
+### tcc_run
+
+Compiles, links, and runs the `main()` function directly. **Do not call `tcc_relocate()` before this.**
+
+```c
+int tcc_run(TCCState *s, int argc, char **argv);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="argc" type="int" required>
+  Number of command-line arguments to pass to `main()`.
+</ParamField>
+
+<ParamField path="argv" type="char**" required>
+  Array of command-line arguments.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns the value returned by the compiled `main()` function.
+</ResponseField>
+
+**Example:**
+
+<CodeGroup>
+
+```c No arguments
+TCCState *s = tcc_new();
+tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+
+const char *code = 
+    "#include <stdio.h>\n"
+    "int main() {\n"
+    "    printf(\"Hello from compiled code!\\n\");\n"
+    "    return 0;\n"
+    "}\n";
+
+tcc_compile_string(s, code);
+
+// Run main() with no arguments
+int exit_code = tcc_run(s, 0, NULL);
+
+printf("Program exited with code: %d\n", exit_code);
+tcc_delete(s);
+```
+
+```c With arguments
+TCCState *s = tcc_new();
+tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+
+const char *code = 
+    "#include <stdio.h>\n"
+    "int main(int argc, char **argv) {\n"
+    "    printf(\"argc = %d\\n\", argc);\n"
+    "    for (int i = 0; i < argc; i++) {\n"
+    "        printf(\"argv[%d] = %s\\n\", i, argv[i]);\n"
+    "    }\n"
+    "    return 0;\n"
+    "}\n";
+
+tcc_compile_string(s, code);
+
+// Prepare arguments
+char *args[] = {"program", "arg1", "arg2"};
+int exit_code = tcc_run(s, 3, args);
+
+tcc_delete(s);
+```
+
+</CodeGroup>
+
+## Getting compiled symbols
+
+### tcc_get_symbol
+
+Returns a pointer to a symbol (function or variable) from the compiled code. You must call `tcc_relocate()` first.
+
+```c
+void *tcc_get_symbol(TCCState *s, const char *name);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="name" type="const char*" required>
+  Name of the symbol to retrieve.
+</ParamField>
+
+<ResponseField name="return" type="void*">
+  Pointer to the symbol, or `NULL` if not found.
+</ResponseField>
+
+**Example:**
+
+<CodeGroup>
+
+```c Getting functions
+TCCState *s = tcc_new();
+tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+
+const char *code = 
+    "int add(int a, int b) { return a + b; }\n"
+    "int multiply(int a, int b) { return a * b; }\n";
+
+tcc_compile_string(s, code);
+tcc_relocate(s);
+
+// Get function pointers
+int (*add_func)(int, int) = tcc_get_symbol(s, "add");
+int (*mul_func)(int, int) = tcc_get_symbol(s, "multiply");
+
+if (!add_func || !mul_func) {
+    fprintf(stderr, "Failed to get symbols\n");
+    return 1;
+}
+
+// Call the functions
+printf("%d + %d = %d\n", 5, 3, add_func(5, 3));
+printf("%d * %d = %d\n", 5, 3, mul_func(5, 3));
+
+tcc_delete(s);
+```
+
+```c Getting variables
+const char *code = 
+    "int counter = 0;\n"
+    "const char *message = \"Hello\";\n"
+    "\n"
+    "void increment() { counter++; }\n";
+
+tcc_compile_string(s, code);
+tcc_relocate(s);
+
+// Get variable pointers
+int *counter = tcc_get_symbol(s, "counter");
+const char **message = tcc_get_symbol(s, "message");
+void (*increment)(void) = tcc_get_symbol(s, "increment");
+
+// Use them
+printf("Counter: %d, Message: %s\n", *counter, *message);
+increment();
+printf("Counter after increment: %d\n", *counter);
+```
+
+```c Getting structs
+const char *code = 
+    "typedef struct {\n"
+    "    int x;\n"
+    "    int y;\n"
+    "} Point;\n"
+    "\n"
+    "Point origin = {0, 0};\n"
+    "\n"
+    "Point create_point(int x, int y) {\n"
+    "    Point p = {x, y};\n"
+    "    return p;\n"
+    "}\n";
+
+tcc_compile_string(s, code);
+tcc_relocate(s);
+
+// Define matching struct in host
+typedef struct { int x; int y; } Point;
+
+// Get symbol and function
+Point *origin = tcc_get_symbol(s, "origin");
+Point (*create_point)(int, int) = tcc_get_symbol(s, "create_point");
+
+printf("Origin: (%d, %d)\n", origin->x, origin->y);
+Point p = create_point(10, 20);
+printf("New point: (%d, %d)\n", p.x, p.y);
+```
+
+</CodeGroup>
+
+### tcc_list_symbols
+
+Lists all global symbols and their values via a callback function.
+
+```c
+void tcc_list_symbols(TCCState *s, void *ctx,
+    void (*symbol_cb)(void *ctx, const char *name, const void *val));
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="ctx" type="void*">
+  User data pointer passed to the callback.
+</ParamField>
+
+<ParamField path="symbol_cb" type="void (*)(void*, const char*, const void*)" required>
+  Callback function called for each symbol.
+</ParamField>
+
+**Example:**
+
+```c
+void print_symbol(void *ctx, const char *name, const void *val) {
+    printf("Symbol: %s at %p\n", name, val);
+}
+
+const char *code = 
+    "int var1 = 10;\n"
+    "int var2 = 20;\n"
+    "void func1(void) {}\n"
+    "void func2(void) {}\n";
+
+tcc_compile_string(s, code);
+tcc_relocate(s);
+
+// List all symbols
+tcc_list_symbols(s, NULL, print_symbol);
+
+// Output:
+// Symbol: var1 at 0x...
+// Symbol: var2 at 0x...
+// Symbol: func1 at 0x...
+// Symbol: func2 at 0x...
+```
+
+## Advanced execution patterns
+
+### Plugin system
+
+```c
+// Plugin interface
+typedef struct {
+    const char* name;
+    void (*init)(void);
+    void (*execute)(void);
+    void (*cleanup)(void);
+} Plugin;
+
+Plugin* load_plugin(const char *source_code) {
+    TCCState *s = tcc_new();
+    tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+    
+    // Compile plugin
+    if (tcc_compile_string(s, source_code) < 0) {
+        tcc_delete(s);
+        return NULL;
+    }
+    
+    if (tcc_relocate(s) < 0) {
+        tcc_delete(s);
+        return NULL;
+    }
+    
+    // Get plugin interface
+    Plugin *plugin = tcc_get_symbol(s, "plugin");
+    if (!plugin) {
+        tcc_delete(s);
+        return NULL;
+    }
+    
+    return plugin;
+}
+
+// Use plugin
+Plugin *p = load_plugin(
+    "#include <stdio.h>\n"
+    "void my_init() { printf(\"Init\\n\"); }\n"
+    "void my_exec() { printf(\"Execute\\n\"); }\n"
+    "void my_cleanup() { printf(\"Cleanup\\n\"); }\n"
+    "Plugin plugin = {\n"
+    "    .name = \"MyPlugin\",\n"
+    "    .init = my_init,\n"
+    "    .execute = my_exec,\n"
+    "    .cleanup = my_cleanup\n"
+    "};\n");
+
+if (p) {
+    p->init();
+    p->execute();
+    p->cleanup();
+}
+```
+
+### Expression evaluator
+
+```c
+double eval_expression(const char *expr) {
+    TCCState *s = tcc_new();
+    tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+    
+    char code[1024];
+    snprintf(code, sizeof(code),
+        "#include <math.h>\n"
+        "double evaluate() {\n"
+        "    return %s;\n"
+        "}\n", expr);
+    
+    if (tcc_compile_string(s, code) < 0) {
+        tcc_delete(s);
+        return 0.0;
+    }
+    
+    tcc_add_library(s, "m");
+    
+    if (tcc_relocate(s) < 0) {
+        tcc_delete(s);
+        return 0.0;
+    }
+    
+    double (*evaluate)(void) = tcc_get_symbol(s, "evaluate");
+    double result = evaluate();
+    
+    tcc_delete(s);
+    return result;
+}
+
+// Usage
+printf("2 + 2 = %f\n", eval_expression("2 + 2"));
+printf("sqrt(16) = %f\n", eval_expression("sqrt(16)"));
+printf("sin(3.14159/2) = %f\n", eval_expression("sin(3.14159/2)"));
+```
+
+### Hot code reloading
+
+```c
+typedef struct {
+    TCCState *state;
+    void (*update)(float dt);
+    void (*render)(void);
+} GameModule;
+
+GameModule* reload_module(GameModule *old, const char *source) {
+    // Clean up old module
+    if (old) {
+        tcc_delete(old->state);
+        free(old);
+    }
+    
+    // Create new module
+    GameModule *module = malloc(sizeof(GameModule));
+    module->state = tcc_new();
+    tcc_set_output_type(module->state, TCC_OUTPUT_MEMORY);
+    
+    if (tcc_compile_string(module->state, source) < 0) {
+        free(module);
+        return NULL;
+    }
+    
+    if (tcc_relocate(module->state) < 0) {
+        tcc_delete(module->state);
+        free(module);
+        return NULL;
+    }
+    
+    module->update = tcc_get_symbol(module->state, "update");
+    module->render = tcc_get_symbol(module->state, "render");
+    
+    return module;
+}
+
+// Main game loop
+GameModule *game = NULL;
+while (running) {
+    // Check if source file changed
+    if (source_file_modified()) {
+        char *new_source = load_source_file("game.c");
+        GameModule *new_game = reload_module(game, new_source);
+        if (new_game) {
+            game = new_game;
+            printf("Hot reload successful!\n");
+        }
+        free(new_source);
+    }
+    
+    if (game) {
+        game->update(delta_time);
+        game->render();
+    }
+}
+```
+
+## Error handling
+
+```c
+void *get_symbol_safe(TCCState *s, const char *name) {
+    void *sym = tcc_get_symbol(s, name);
+    if (!sym) {
+        fprintf(stderr, "Error: Symbol '%s' not found\n", name);
+        fprintf(stderr, "Available symbols:\n");
+        tcc_list_symbols(s, NULL, print_symbol);
+    }
+    return sym;
+}
+
+// Usage
+int (*func)(int) = get_symbol_safe(s, "my_function");
+if (!func) {
+    // Handle error
+    return 1;
+}
+```

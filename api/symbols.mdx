@@ -1,0 +1,479 @@
+---
+title: Symbols
+description: Symbol management, lookup, and debugging functions
+---
+
+This page covers additional symbol management functions and advanced features of the libtcc API.
+
+## Symbol lookup and enumeration
+
+After relocating your compiled code, you can retrieve and enumerate symbols.
+
+### tcc_get_symbol
+
+Retrieves a pointer to a compiled symbol. See [Execution](/api/execution#tcc_get_symbol) for detailed documentation.
+
+```c
+void *tcc_get_symbol(TCCState *s, const char *name);
+```
+
+### tcc_list_symbols
+
+Enumerates all global symbols. See [Execution](/api/execution#tcc_list_symbols) for detailed documentation.
+
+```c
+void tcc_list_symbols(TCCState *s, void *ctx,
+    void (*symbol_cb)(void *ctx, const char *name, const void *val));
+```
+
+## Symbol introspection
+
+### Finding all functions
+
+```c
+#include <string.h>
+
+typedef struct {
+    char **names;
+    void **pointers;
+    int count;
+    int capacity;
+} SymbolList;
+
+void add_symbol(SymbolList *list, const char *name, const void *ptr) {
+    if (list->count >= list->capacity) {
+        list->capacity = list->capacity ? list->capacity * 2 : 10;
+        list->names = realloc(list->names, list->capacity * sizeof(char*));
+        list->pointers = realloc(list->pointers, list->capacity * sizeof(void*));
+    }
+    list->names[list->count] = strdup(name);
+    list->pointers[list->count] = (void*)ptr;
+    list->count++;
+}
+
+void collect_symbol(void *ctx, const char *name, const void *val) {
+    SymbolList *list = (SymbolList*)ctx;
+    add_symbol(list, name, val);
+}
+
+SymbolList get_all_symbols(TCCState *s) {
+    SymbolList list = {NULL, NULL, 0, 0};
+    tcc_list_symbols(s, &list, collect_symbol);
+    return list;
+}
+
+// Usage
+SymbolList symbols = get_all_symbols(s);
+printf("Found %d symbols:\n", symbols.count);
+for (int i = 0; i < symbols.count; i++) {
+    printf("  %s -> %p\n", symbols.names[i], symbols.pointers[i]);
+}
+```
+
+### Symbol filtering
+
+```c
+typedef struct {
+    const char *prefix;
+    SymbolList *list;
+} FilterContext;
+
+void filter_by_prefix(void *ctx, const char *name, const void *val) {
+    FilterContext *fc = (FilterContext*)ctx;
+    if (strncmp(name, fc->prefix, strlen(fc->prefix)) == 0) {
+        add_symbol(fc->list, name, val);
+    }
+}
+
+SymbolList get_symbols_with_prefix(TCCState *s, const char *prefix) {
+    SymbolList list = {NULL, NULL, 0, 0};
+    FilterContext fc = {prefix, &list};
+    tcc_list_symbols(s, &fc, filter_by_prefix);
+    return list;
+}
+
+// Find all functions starting with "test_"
+SymbolList tests = get_symbols_with_prefix(s, "test_");
+for (int i = 0; i < tests.count; i++) {
+    void (*test_func)(void) = tests.pointers[i];
+    printf("Running %s...\n", tests.names[i]);
+    test_func();
+}
+```
+
+## Debugging support
+
+### elf_output_obj
+
+Outputs an object file after relocation for debugging purposes. The file is only generated if debugging is enabled.
+
+```c
+int elf_output_obj(TCCState *s, const char *filename);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context (must be after `tcc_relocate()`).
+</ParamField>
+
+<ParamField path="filename" type="const char*" required>
+  Output filename for the object file.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success, -1 on error.
+</ResponseField>
+
+**Example:**
+
+```c
+TCCState *s = tcc_new();
+tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+
+// Enable debugging
+tcc_set_options(s, "-g");
+
+tcc_compile_string(s, 
+    "int add(int a, int b) { return a + b; }");
+
+tcc_relocate(s);
+
+// Output object file for debugging
+elf_output_obj(s, "debug.o");
+
+// Can now use: gdb -ex "add-symbol-file debug.o 0x..." your_program
+```
+
+### tcc_set_backtrace_func
+
+Sets a custom backtrace function for runtime exceptions when using `-bt` option.
+
+```c
+typedef int TCCBtFunc(void *udata, void *pc, const char *file, 
+                       int line, const char *func, const char *msg);
+void tcc_set_backtrace_func(TCCState *s, void *userdata, TCCBtFunc *func);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="userdata" type="void*">
+  User data pointer passed to the backtrace callback.
+</ParamField>
+
+<ParamField path="func" type="TCCBtFunc*" required>
+  Callback function for backtrace entries. Return 0 to stop backtrace.
+</ParamField>
+
+**Example:**
+
+```c
+int custom_backtrace(void *udata, void *pc, const char *file,
+                     int line, const char *func, const char *msg) {
+    FILE *log = (FILE*)udata;
+    fprintf(log, "  at %s:%d in %s() [pc=%p]\n", 
+            file, line, func, pc);
+    if (msg) {
+        fprintf(log, "    %s\n", msg);
+    }
+    return 1; // Continue backtrace
+}
+
+TCCState *s = tcc_new();
+tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+tcc_set_options(s, "-bt");  // Enable backtrace support
+
+FILE *log = fopen("backtrace.log", "w");
+tcc_set_backtrace_func(s, log, custom_backtrace);
+
+// Compile and run code with backtrace support
+```
+
+## Advanced symbol patterns
+
+### Function registry
+
+```c
+typedef void (*CommandFunc)(int argc, char **argv);
+
+typedef struct {
+    const char *name;
+    CommandFunc func;
+} Command;
+
+Command *commands = NULL;
+int num_commands = 0;
+
+void register_command_callback(void *ctx, const char *name, const void *val) {
+    // Only register functions starting with "cmd_"
+    if (strncmp(name, "cmd_", 4) == 0) {
+        commands = realloc(commands, (num_commands + 1) * sizeof(Command));
+        commands[num_commands].name = strdup(name + 4); // Remove "cmd_" prefix
+        commands[num_commands].func = (CommandFunc)val;
+        num_commands++;
+    }
+}
+
+void register_commands(TCCState *s) {
+    tcc_list_symbols(s, NULL, register_command_callback);
+}
+
+CommandFunc find_command(const char *name) {
+    for (int i = 0; i < num_commands; i++) {
+        if (strcmp(commands[i].name, name) == 0) {
+            return commands[i].func;
+        }
+    }
+    return NULL;
+}
+
+// Usage:
+const char *plugin_code = 
+    "#include <stdio.h>\n"
+    "void cmd_hello(int argc, char **argv) {\n"
+    "    printf(\"Hello command!\\n\");\n"
+    "}\n"
+    "void cmd_echo(int argc, char **argv) {\n"
+    "    for (int i = 1; i < argc; i++)\n"
+    "        printf(\"%s \", argv[i]);\n"
+    "    printf(\"\\n\");\n"
+    "}\n";
+
+tcc_compile_string(s, plugin_code);
+tcc_relocate(s);
+register_commands(s);
+
+// Execute commands
+CommandFunc cmd = find_command("hello");
+if (cmd) cmd(0, NULL);
+```
+
+### Type-safe symbol access
+
+```c
+#define GET_FUNC(s, name, ret, ...) \
+    ((ret (*)(__VA_ARGS__))tcc_get_symbol(s, name))
+
+#define GET_VAR(s, name, type) \
+    ((type*)tcc_get_symbol(s, name))
+
+// Usage:
+int (*add)(int, int) = GET_FUNC(s, "add", int, int, int);
+void (*print)(const char*) = GET_FUNC(s, "print", void, const char*);
+int *counter = GET_VAR(s, "counter", int);
+
+if (add && print && counter) {
+    *counter = add(5, 3);
+    print("Success");
+}
+```
+
+### Symbol validation
+
+```c
+typedef struct {
+    const char *name;
+    int found;
+} RequiredSymbol;
+
+void check_symbol(void *ctx, const char *name, const void *val) {
+    RequiredSymbol *required = (RequiredSymbol*)ctx;
+    for (int i = 0; required[i].name != NULL; i++) {
+        if (strcmp(required[i].name, name) == 0) {
+            required[i].found = 1;
+        }
+    }
+}
+
+int validate_symbols(TCCState *s, const char **required_names) {
+    // Count required symbols
+    int count = 0;
+    while (required_names[count]) count++;
+    
+    // Build validation list
+    RequiredSymbol *required = calloc(count + 1, sizeof(RequiredSymbol));
+    for (int i = 0; i < count; i++) {
+        required[i].name = required_names[i];
+        required[i].found = 0;
+    }
+    required[count].name = NULL;
+    
+    // Check symbols
+    tcc_list_symbols(s, required, check_symbol);
+    
+    // Report missing symbols
+    int all_found = 1;
+    for (int i = 0; i < count; i++) {
+        if (!required[i].found) {
+            fprintf(stderr, "Missing required symbol: %s\n", required[i].name);
+            all_found = 0;
+        }
+    }
+    
+    free(required);
+    return all_found;
+}
+
+// Usage:
+const char *required[] = {"init", "update", "cleanup", NULL};
+if (!validate_symbols(s, required)) {
+    fprintf(stderr, "Plugin missing required functions\n");
+    return 1;
+}
+```
+
+## Runtime exception handling
+
+### _tcc_setjmp (experimental)
+
+Catches runtime exceptions when using backtrace support. This is an experimental/advanced feature.
+
+```c
+void *_tcc_setjmp(TCCState *s, void *jmp_buf, void *top_func, void *longjmp);
+
+#define tcc_setjmp(s, jb, f) setjmp(_tcc_setjmp(s, jb, f, longjmp))
+```
+
+<Warning>
+This is an experimental feature. See `libtcc_test_mt.c` in the TCC source for usage examples.
+</Warning>
+
+**Example:**
+
+```c
+#include <setjmp.h>
+
+jmp_buf jbuf;
+
+TCCState *s = tcc_new();
+tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+tcc_set_options(s, "-bt");  // Enable backtrace
+
+const char *code = 
+    "void crash() {\n"
+    "    int *p = 0;\n"
+    "    *p = 42;  // Segfault\n"
+    "}\n";
+
+tcc_compile_string(s, code);
+tcc_relocate(s);
+
+void (*crash)(void) = tcc_get_symbol(s, "crash");
+
+if (tcc_setjmp(s, jbuf, crash) == 0) {
+    crash();  // This will crash
+} else {
+    printf("Caught exception!\n");
+}
+```
+
+## Complete example: Dynamic module system
+
+```c
+#include "libtcc.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    int version;
+    const char *name;
+    void (*init)(void);
+    void (*shutdown)(void);
+} ModuleInterface;
+
+typedef struct {
+    TCCState *state;
+    ModuleInterface *interface;
+    char *source;
+} Module;
+
+Module *load_module(const char *source) {
+    Module *mod = calloc(1, sizeof(Module));
+    mod->source = strdup(source);
+    mod->state = tcc_new();
+    
+    tcc_set_output_type(mod->state, TCC_OUTPUT_MEMORY);
+    tcc_set_options(mod->state, "-g -bt");
+    
+    if (tcc_compile_string(mod->state, source) < 0) {
+        fprintf(stderr, "Failed to compile module\n");
+        tcc_delete(mod->state);
+        free(mod->source);
+        free(mod);
+        return NULL;
+    }
+    
+    if (tcc_relocate(mod->state) < 0) {
+        fprintf(stderr, "Failed to relocate module\n");
+        tcc_delete(mod->state);
+        free(mod->source);
+        free(mod);
+        return NULL;
+    }
+    
+    mod->interface = tcc_get_symbol(mod->state, "module_interface");
+    if (!mod->interface) {
+        fprintf(stderr, "Module missing interface\n");
+        tcc_delete(mod->state);
+        free(mod->source);
+        free(mod);
+        return NULL;
+    }
+    
+    printf("Loaded module: %s (version %d)\n", 
+           mod->interface->name, mod->interface->version);
+    
+    if (mod->interface->init) {
+        mod->interface->init();
+    }
+    
+    return mod;
+}
+
+void unload_module(Module *mod) {
+    if (mod->interface && mod->interface->shutdown) {
+        mod->interface->shutdown();
+    }
+    tcc_delete(mod->state);
+    free(mod->source);
+    free(mod);
+}
+
+int main() {
+    const char *module_source = 
+        "#include <stdio.h>\n"
+        "\n"
+        "void my_init(void) {\n"
+        "    printf(\"Module initializing...\\n\");\n"
+        "}\n"
+        "\n"
+        "void my_shutdown(void) {\n"
+        "    printf(\"Module shutting down...\\n\");\n"
+        "}\n"
+        "\n"
+        "typedef struct {\n"
+        "    int version;\n"
+        "    const char *name;\n"
+        "    void (*init)(void);\n"
+        "    void (*shutdown)(void);\n"
+        "} ModuleInterface;\n"
+        "\n"
+        "ModuleInterface module_interface = {\n"
+        "    .version = 1,\n"
+        "    .name = \"TestModule\",\n"
+        "    .init = my_init,\n"
+        "    .shutdown = my_shutdown\n"
+        "};\n";
+    
+    Module *mod = load_module(module_source);
+    if (!mod) {
+        return 1;
+    }
+    
+    // Use module...
+    
+    unload_module(mod);
+    return 0;
+}
+```

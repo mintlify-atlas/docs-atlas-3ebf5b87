@@ -1,0 +1,413 @@
+---
+title: Command reference
+description: Complete reference for all TCC commands and subcommands
+---
+
+## Synopsis
+
+```bash
+tcc [options] [infile1 infile2...] [-run infile args...]
+```
+
+TCC options are very similar to GCC options. The main difference is that TCC can also execute the resulting program directly and pass it runtime arguments.
+
+## Basic compilation commands
+
+### Compile and link
+
+Compile C source files and generate an executable:
+
+```bash
+tcc -o myprog a.c b.c
+```
+
+This compiles `a.c` and `b.c`, links them together, and generates the executable `myprog`.
+
+### Compile only
+
+<ParamField path="-c" type="flag">
+  Compile only - generate an object file without linking.
+</ParamField>
+
+Compile a C source file to an object file:
+
+```bash
+tcc -c a.c
+```
+
+This compiles `a.c` and generates the object file `a.o`.
+
+<Tabs>
+  <Tab title="C source">
+    ```bash
+    tcc -c source.c
+    # Generates: source.o
+    ```
+  </Tab>
+  <Tab title="Assembly with preprocessing">
+    ```bash
+    tcc -c asmfile.S
+    # Preprocess with C preprocessor and assemble
+    # Generates: asmfile.o
+    ```
+  </Tab>
+  <Tab title="Assembly without preprocessing">
+    ```bash
+    tcc -c asmfile.s
+    # Assemble only (no preprocessing)
+    # Generates: asmfile.o
+    ```
+  </Tab>
+</Tabs>
+
+### Link object files
+
+Link object files together to create an executable:
+
+```bash
+tcc -o myprog a.o b.o
+```
+
+### Generate relocatable object file
+
+<ParamField path="-r" type="flag">
+  Generate a relocatable object file by combining all input files.
+</ParamField>
+
+```bash
+tcc -r -o ab.o a.c b.c
+```
+
+This compiles `a.c` and `b.c`, links them together, and generates the relocatable object file `ab.o`.
+
+## Run command
+
+<ParamField path="-run" type="flag">
+  Compile source file(s) and run the resulting program immediately with optional command-line arguments.
+</ParamField>
+
+### Basic execution
+
+Compile and execute a C program directly:
+
+```bash
+tcc -run a.c
+```
+
+### With arguments
+
+Pass arguments to the compiled program:
+
+```bash
+tcc -run a.c arg1 arg2
+```
+
+The arguments `arg1` and `arg2` are passed to the `main()` function of `a.c`.
+
+### Multiple source files
+
+Compile multiple files and execute them:
+
+```bash
+tcc a.c -run b.c arg1
+```
+
+This compiles `a.c` and `b.c`, links them together, and executes the resulting program with `arg1` as the first argument.
+
+### With TCC options
+
+You can pass TCC options after `-run` by enclosing them in quotes:
+
+```bash
+tcc "-run -L/usr/X11R6/lib -lX11" ex4.c
+```
+
+<Note>
+  When using `-run`, TCC compiles the code in memory and executes it immediately without creating an executable file on disk.
+</Note>
+
+### Custom stdin
+
+Redirect stdin for the running program:
+
+```bash
+tcc -run -rstdin input.txt program.c
+```
+
+## Preprocessing commands
+
+<ParamField path="-E" type="flag">
+  Preprocess only - output the preprocessed source to stdout or file (with `-o`).
+</ParamField>
+
+Preprocess a C source file:
+
+```bash
+tcc -E source.c
+```
+
+Save preprocessed output to a file:
+
+```bash
+tcc -E source.c -o source.i
+```
+
+### Preprocessing options
+
+<Tabs>
+  <Tab title="Standard preprocessing">
+    ```bash
+    tcc -E source.c
+    # Output includes #line directives
+    ```
+  </Tab>
+  <Tab title="No line directives">
+    ```bash
+    tcc -E -P source.c
+    # Do not output #line directives
+    ```
+  </Tab>
+  <Tab title="Alternative line directives">
+    ```bash
+    tcc -E -P1 source.c
+    # Output alternative #line directives
+    ```
+  </Tab>
+</Tabs>
+
+### Show macro definitions
+
+<ParamField path="-dD" type="flag">
+  With `-E`: output `#define` directives along with preprocessed code.
+</ParamField>
+
+<ParamField path="-dM" type="flag">
+  With `-E`: output only `#define` directives (no preprocessed code).
+</ParamField>
+
+```bash
+# Show all macros with preprocessed code
+tcc -E -dD source.c
+
+# Show only macro definitions
+tcc -E -dM source.c
+```
+
+<Tip>
+  To see all predefined macros, use: `tcc -E -dM - < /dev/null` (Linux/macOS) or `tcc -E -dM - < nul` (Windows)
+</Tip>
+
+## Shared library commands
+
+<ParamField path="-shared" type="flag">
+  Generate a shared library instead of an executable.
+</ParamField>
+
+Create a shared library:
+
+```bash
+tcc -shared -o libmylib.so mylib.c
+```
+
+<ParamField path="-soname" type="string">
+  Set the name for the shared library to be used at runtime.
+</ParamField>
+
+```bash
+tcc -shared -soname libmylib.so.1 -o libmylib.so.1.0 mylib.c
+```
+
+## Archive tool
+
+TCC includes an integrated archiver for creating static libraries:
+
+```bash
+tcc -ar [crstvx] lib.a [files...]
+```
+
+### Archive operations
+
+<ParamField path="c" type="flag">
+  Create the archive.
+</ParamField>
+
+<ParamField path="r" type="flag">
+  Replace or add files to the archive.
+</ParamField>
+
+<ParamField path="s" type="flag">
+  Create or update the archive symbol index.
+</ParamField>
+
+<ParamField path="t" type="flag">
+  List the contents of the archive.
+</ParamField>
+
+<ParamField path="v" type="flag">
+  Verbose output.
+</ParamField>
+
+<ParamField path="x" type="flag">
+  Extract files from the archive.
+</ParamField>
+
+### Examples
+
+```bash
+# Create a static library
+tcc -ar cr libmylib.a file1.o file2.o file3.o
+
+# List archive contents
+tcc -ar t libmylib.a
+
+# Extract files from archive
+tcc -ar x libmylib.a
+```
+
+## Import library tool (Windows)
+
+On Windows, TCC can create import definition files from DLLs:
+
+```bash
+tcc -impdef lib.dll [-v] [-o lib.def]
+```
+
+Create a `.def` file from a DLL:
+
+```bash
+tcc -impdef kernel32.dll -o kernel32.def
+```
+
+## Information commands
+
+### Version information
+
+<ParamField path="-v, --version" type="flag">
+  Display TCC version information.
+</ParamField>
+
+```bash
+tcc -v
+```
+
+Output:
+```
+tcc version 0.9.27 (x86_64 Linux)
+```
+
+<ParamField path="-dumpversion" type="flag">
+  Print only the version number.
+</ParamField>
+
+```bash
+tcc -dumpversion
+```
+
+### Verbose output
+
+<ParamField path="-vv" type="flag">
+  Show included files during compilation. As sole argument, print search directories.
+</ParamField>
+
+```bash
+# Show included files
+tcc -vv -c source.c
+
+# Print search directories
+tcc -vv
+```
+
+<ParamField path="-vvv" type="flag">
+  Show included files and all file search attempts.
+</ParamField>
+
+### Search paths
+
+<ParamField path="-print-search-dirs" type="flag">
+  Print the configured installation directory and list of library and include directories that TCC will search.
+</ParamField>
+
+```bash
+tcc -print-search-dirs
+```
+
+Output:
+```
+install: /usr/local/lib/tcc
+include:
+  /usr/local/include
+  /usr/include
+  /usr/local/lib/tcc/include
+libraries:
+  /usr/local/lib
+  /usr/lib
+  /lib
+```
+
+## Help commands
+
+<ParamField path="-h" type="flag">
+  Display basic help message with common options.
+</ParamField>
+
+```bash
+tcc -h
+```
+
+<ParamField path="-hh" type="flag">
+  Display extended help with all options including warnings, flags, and linker options.
+</ParamField>
+
+```bash
+tcc -hh
+```
+
+## Input from stdin
+
+TCC can read C source code from standard input:
+
+```bash
+echo 'main(){puts("hello");}' | tcc -run -
+```
+
+The `-` character is used in place of the input filename to indicate stdin.
+
+## Response files
+
+<ParamField path="@listfile" type="string">
+  Read command-line arguments from a file. Each line in the file is treated as a separate argument.
+</ParamField>
+
+```bash
+tcc @compile_options.txt
+```
+
+Example `compile_options.txt`:
+```
+-o
+myprog
+-g
+source1.c
+source2.c
+```
+
+<Note>
+  Response files are useful for very long command lines that might exceed shell limits.
+</Note>
+
+## Compilation statistics
+
+<ParamField path="-bench" type="flag">
+  Display compilation statistics including time and memory usage.
+</ParamField>
+
+```bash
+tcc -bench -c source.c
+```
+
+Output:
+```
+* compiling time: 0.021s (0.021s / 1 idents)
+* code time: 0.012s
+* data time: 0.003s
+```

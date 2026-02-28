@@ -1,0 +1,350 @@
+---
+title: C language support
+description: ISO C99 compliance, ANSI C implementation, and GNU extensions in TinyCC
+---
+
+TinyCC implements comprehensive C language support, including full ANSI C, most of ISO C99, and many GNU C extensions. This makes TCC compatible with a wide range of existing C code while maintaining its small size and fast compilation speed.
+
+## ANSI C compliance
+
+TCC implements all the ANSI C standard features:
+
+- Structure bit fields with full type support
+- Floating point numbers (`long double`, `double`, and `float` fully supported)
+- All standard data types and operations
+- Complete preprocessor implementation
+
+<Info>
+TCC includes a full C preprocessor, so you can use all standard preprocessor directives including `#include`, `#define`, `#ifdef`, and conditional compilation.
+</Info>
+
+## ISO C99 extensions
+
+TinyCC implements many features of the ISO C99 standard. Currently missing items are complex and imaginary numbers.
+
+### Supported ISO C99 features
+
+<Accordion title="Variable length arrays">
+VLAs allow you to declare arrays with runtime-determined sizes:
+
+```c
+void process_data(int n) {
+    int buffer[n];  // Size determined at runtime
+    // ... use buffer
+}
+```
+</Accordion>
+
+<Accordion title="64-bit long long types">
+Full support for 64-bit integer types:
+
+```c
+long long big_number = 0x123456789ABCDEFLL;
+unsigned long long huge = 18446744073709551615ULL;
+```
+</Accordion>
+
+<Accordion title="Boolean type">
+The `_Bool` type is supported for boolean values:
+
+```c
+#include <stdbool.h>
+
+bool is_valid = true;
+if (is_valid) {
+    // ...
+}
+```
+</Accordion>
+
+<Accordion title="__func__ identifier">
+`__func__` is a string variable containing the current function name:
+
+```c
+void debug_function() {
+    printf("In function: %s\n", __func__);
+}
+```
+</Accordion>
+
+<Accordion title="Variadic macros">
+`__VA_ARGS__` can be used for function-like macros with variable arguments:
+
+```c
+#define dprintf(level, __VA_ARGS__) printf(__VA_ARGS__)
+
+dprintf(1, "Value: %d\n", 42);
+dprintf(2, "Two values: %d, %s\n", 10, "test");
+```
+</Accordion>
+
+### Additional C99 features
+
+<CodeGroup>
+
+```c Declarations anywhere
+void example() {
+    int x = 10;
+    
+    // Code here
+    process(x);
+    
+    // Declaration can appear mid-block (like C++)
+    int y = 20;
+    process(y);
+}
+```
+
+```c Designated initializers
+struct { int x, y; } st[10] = { [0].x = 1, [0].y = 2 };
+
+int tab[10] = { 1, 2, [5] = 5, [9] = 9 };
+```
+
+```c Compound initializers
+int *p = (int []){ 1, 2, 3 };
+
+// Also works for structures and strings
+struct point { int x, y; };
+struct point *pt = &(struct point){ 10, 20 };
+```
+
+```c Hexadecimal floats
+double d = 0x1234p10;  // Same as 4771840.0
+double small = 0x1.5p-3;  // 0.15625
+```
+
+</CodeGroup>
+
+<Note>
+The `inline` and `restrict` keywords are recognized but currently ignored by TCC.
+</Note>
+
+## GNU C extensions
+
+TCC implements many GNU C extensions for compatibility with GCC code.
+
+### Designator extensions
+
+<CodeGroup>
+
+```c Array designators without '='
+int a[10] = { [0] 1, [5] 2, 3, 4 };
+```
+
+```c Structure field label syntax
+struct { int x, y; } st = { x: 1, y: 1 };
+
+// Standard C99 syntax also supported:
+struct { int x, y; } st2 = { .x = 1, .y = 1 };
+```
+
+</CodeGroup>
+
+### Extended syntax
+
+- **Escape character**: `\e` is ASCII character 27 (ESC)
+- **Case ranges**: Use ranges in switch cases
+
+```c
+switch(ch) {
+case 'a' ... 'z':
+    printf("lowercase\n");
+    break;
+case 'A' ... 'Z':
+    printf("uppercase\n");
+    break;
+default:
+    printf("other\n");
+    break;
+}
+```
+
+### Attributes
+
+The `__attribute__` keyword allows specifying variable and function attributes:
+
+<Accordion title="Alignment and packing">
+```c
+// Align variable to 8 bytes
+int a __attribute__ ((aligned(8), section(".mysection")));
+
+// Force alignment to 1 byte
+struct packed_data {
+    char c;
+    int i __attribute__ ((packed));
+} __attribute__ ((packed));
+```
+</Accordion>
+
+<Accordion title="Section placement">
+```c
+int my_add(int a, int b) __attribute__ ((section(".mycodesection"))) 
+{
+    return a + b;
+}
+```
+
+This generates the function in the specified assembly section.
+</Accordion>
+
+<Accordion title="Calling conventions">
+```c
+// Standard C calling convention (default)
+void func1(int x) __attribute__ ((cdecl));
+
+// Pascal-like calling convention
+void func2(int x) __attribute__ ((stdcall));
+
+// Fast i386 calling convention (n = 1-3)
+int func3(int a, int b, int c) __attribute__ ((regparm(3)));
+```
+
+For `regparm(n)`, the first n parameters go in registers `%eax`, `%edx`, and `%ecx`.
+</Accordion>
+
+<Accordion title="Other attributes">
+- `unused`: Suppress warnings for unused variables/functions
+- `dllexport`: Export function from DLL/executable (Windows)
+- `nodecorate`: Don't apply decorations when exporting (Windows)
+</Accordion>
+
+### Advanced features
+
+<CodeGroup>
+
+```c GNU variadic macros
+#define dprintf(fmt, args...) printf(fmt, ## args)
+
+dprintf("no arg\n");
+dprintf("one arg %d\n", 1);
+```
+
+```c typeof operator
+int x = 5;
+typeof(x) y = 10;  // y is also int
+
+typeof(int *) ptr;  // ptr is int*
+```
+
+```c __alignof__ operator
+size_t int_alignment = __alignof__(int);
+size_t struct_alignment = __alignof__(struct my_struct);
+```
+
+```c Computed gotos
+void example() {
+    void *target = &&label1;
+    
+    goto *target;  // Jump to label1
+    
+label1:
+    printf("Reached label1\n");
+}
+```
+
+</CodeGroup>
+
+### Built-in functions
+
+TCC supports several GCC built-in functions:
+
+```c
+// Type compatibility check
+if (__builtin_types_compatible_p(typeof(x), int)) {
+    // x is an int
+}
+
+// Constant expression check
+if (__builtin_constant_p(expr)) {
+    // expr is a compile-time constant
+}
+```
+
+### Inline assembly
+
+Full support for GCC-style inline assembly with a gas-like (GNU assembler) syntax:
+
+```c
+static inline void * my_memcpy(void * to, const void * from, size_t n)
+{
+    int d0, d1, d2;
+    __asm__ __volatile__(
+        "rep ; movsl\n\t"
+        "testb $2,%b4\n\t"
+        "je 1f\n\t"
+        "movsw\n"
+        "1:\ttestb $1,%b4\n\t"
+        "je 2f\n\t"
+        "movsb\n"
+        "2:"
+        : "=&c" (d0), "=&D" (d1), "=&S" (d2)
+        :"0" (n/4), "q" (n),"1" ((long) to),"2" ((long) from)
+        : "memory");
+    return to;
+}
+```
+
+<Info>
+TCC includes its own x86 inline assembler with gas-like syntax. No intermediate files are generated, and GCC 3.x named operands are supported.
+</Info>
+
+## TinyCC-specific extensions
+
+### Predefined macros
+
+- `__TINYC__`: Defined to indicate TCC is being used
+- `__TCC_BCHECK__`: Defined when bounds checking is enabled (`-b` option)
+- `__TCC_BACKTRACE__`: Defined when backtrace support is enabled (`-bt` option)
+
+### Script support
+
+```c
+#!/usr/local/bin/tcc -run
+#include <stdio.h>
+
+int main() 
+{
+    printf("Hello World\n");
+    return 0;
+}
+```
+
+<Tip>
+`#!` at the start of a line is ignored to allow C scripting. Make the file executable with `chmod +x` and run it directly.
+</Tip>
+
+### Binary literals
+
+Binary digit literals are supported:
+
+```c
+int mask = 0b10101010;  // Same as 0xAA or 170
+int flags = 0b1111;     // Same as 15
+```
+
+## Compatibility notes
+
+<Warning>
+**`__FUNCTION__` interpretation**: TCC interprets `__FUNCTION__` as C99 `__func__` (a variable), not as a string literal like GCC does.
+</Warning>
+
+### Pragma support
+
+`#pragma pack` is supported for Windows compatibility:
+
+```c
+#pragma pack(push, 1)
+struct packed_struct {
+    char c;
+    int i;
+};
+#pragma pack(pop)
+```
+
+### Standard version
+
+Use `-std=version` to control `__STDC_VERSION__`:
+
+- `-std=c11` or `-std=gnu11`: Sets to `201112`
+- Otherwise: Sets to `199901`

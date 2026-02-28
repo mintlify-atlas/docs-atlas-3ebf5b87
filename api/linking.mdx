@@ -1,0 +1,374 @@
+---
+title: Linking
+description: Linking libraries and managing library paths
+---
+
+After compilation, you typically need to link against libraries and add external symbols.
+
+## Adding libraries
+
+### tcc_add_library
+
+Links a library to the compiled code. The library name follows the convention used by the `-l` linker option.
+
+```c
+int tcc_add_library(TCCState *s, const char *libraryname);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="libraryname" type="const char*" required>
+  Library name without the "lib" prefix or file extension.
+  For special cases, prefix with `:` to use an exact filename.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success, -1 on error.
+</ResponseField>
+
+**Example:**
+
+<CodeGroup>
+
+```c Standard libraries
+// Link with libm.so (math library)
+tcc_add_library(s, "m");
+
+// Link with libpthread.so
+tcc_add_library(s, "pthread");
+
+// Link with libcurl.so
+tcc_add_library(s, "curl");
+```
+
+```c Exact filename
+// Use exact filename (searches for "myexactlib.a")
+tcc_add_library(s, ": myexactlib.a");
+```
+
+</CodeGroup>
+
+The function searches for libraries in this order:
+1. Dynamic libraries (`.so`, `.dylib`, or `.dll` depending on platform)
+2. Static libraries (`.a`)
+
+### tcc_add_library_path
+
+Adds a directory to the library search path (equivalent to `-L` option).
+
+```c
+int tcc_add_library_path(TCCState *s, const char *pathname);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="pathname" type="const char*" required>
+  Directory path to add to the library search path.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success.
+</ResponseField>
+
+**Example:**
+
+```c
+// Add custom library paths
+tcc_add_library_path(s, "/usr/local/lib");
+tcc_add_library_path(s, "./build/lib");
+tcc_add_library_path(s, "/opt/myapp/lib");
+
+// Now libraries in these directories can be found
+tcc_add_library(s, "mylib");  // Finds /usr/local/lib/libmylib.so
+```
+
+## Adding symbols
+
+### tcc_add_symbol
+
+Adds a symbol (function or variable) to the compiled program, making host application symbols available to compiled code.
+
+```c
+int tcc_add_symbol(TCCState *s, const char *name, const void *val);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="name" type="const char*" required>
+  Symbol name (must match the name used in compiled code).
+</ParamField>
+
+<ParamField path="val" type="const void*" required>
+  Pointer to the function or variable.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success, -1 on error.
+</ResponseField>
+
+**Example:**
+
+<CodeGroup>
+
+```c Adding functions
+// Function in host application
+int host_add(int a, int b) {
+    return a + b;
+}
+
+void host_log(const char *msg) {
+    printf("[LOG] %s\n", msg);
+}
+
+// Make functions available to compiled code
+tcc_add_symbol(s, "host_add", host_add);
+tcc_add_symbol(s, "host_log", host_log);
+
+// Now compile code that uses these functions
+const char *code = 
+    "extern int host_add(int, int);\n"
+    "extern void host_log(const char*);\n"
+    "\n"
+    "int my_function() {\n"
+    "    int result = host_add(10, 20);\n"
+    "    host_log(\"Calculation done\");\n"
+    "    return result;\n"
+    "}\n";
+
+tcc_compile_string(s, code);
+```
+
+```c Adding variables
+// Global variable in host
+const char config_path[] = "/etc/myapp.conf";
+int max_connections = 100;
+
+// Make variables available
+tcc_add_symbol(s, "config_path", config_path);
+tcc_add_symbol(s, "max_connections", &max_connections);
+
+// Use in compiled code
+const char *code = 
+    "#include <stdio.h>\n"
+    "extern const char config_path[];\n"
+    "extern int max_connections;\n"
+    "\n"
+    "void show_config() {\n"
+    "    printf(\"Config: %s\\n\", config_path);\n"
+    "    printf(\"Max connections: %d\\n\", max_connections);\n"
+    "}\n";
+
+tcc_compile_string(s, code);
+```
+
+```c Callback pattern
+// Callback function in host
+void on_event(const char *event, int value) {
+    printf("Event: %s, Value: %d\n", event, value);
+}
+
+tcc_add_symbol(s, "on_event", on_event);
+
+// Compiled code can call back
+const char *code = 
+    "extern void on_event(const char*, int);\n"
+    "\n"
+    "void process_data(int data) {\n"
+    "    if (data > 100) {\n"
+    "        on_event(\"threshold_exceeded\", data);\n"
+    "    }\n"
+    "}\n";
+
+tcc_compile_string(s, code);
+```
+
+</CodeGroup>
+
+<Warning>
+You must add symbols **before** calling `tcc_relocate()`. Symbols cannot be added after relocation.
+</Warning>
+
+## Output file generation
+
+### tcc_output_file
+
+Generates an output file (executable, library, or object). **Do not call `tcc_relocate()` before this.**
+
+```c
+int tcc_output_file(TCCState *s, const char *filename);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="filename" type="const char*" required>
+  Path for the output file.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success, -1 on error.
+</ResponseField>
+
+**Example:**
+
+<CodeGroup>
+
+```c Generate executable
+TCCState *s = tcc_new();
+tcc_set_output_type(s, TCC_OUTPUT_EXE);
+
+tcc_add_file(s, "main.c");
+tcc_add_library(s, "m");
+
+// Generate executable
+if (tcc_output_file(s, "myprogram") < 0) {
+    fprintf(stderr, "Failed to generate executable\n");
+    return 1;
+}
+
+tcc_delete(s);
+```
+
+```c Generate shared library
+TCCState *s = tcc_new();
+tcc_set_output_type(s, TCC_OUTPUT_DLL);
+
+tcc_add_file(s, "mylib.c");
+
+// Generate shared library
+tcc_output_file(s, "libmylib.so");
+
+tcc_delete(s);
+```
+
+```c Generate object file
+TCCState *s = tcc_new();
+tcc_set_output_type(s, TCC_OUTPUT_OBJ);
+
+tcc_compile_string(s, 
+    "int helper(int x) { return x * 2; }");
+
+tcc_output_file(s, "helper.o");
+
+tcc_delete(s);
+```
+
+</CodeGroup>
+
+## Complete linking example
+
+```c
+#include "libtcc.h"
+#include <stdio.h>
+
+// Host functions to expose
+int add(int a, int b) {
+    return a + b;
+}
+
+void log_message(const char *msg) {
+    printf("[HOST] %s\n", msg);
+}
+
+// Host data
+const char app_name[] = "MyApp";
+
+int main() {
+    TCCState *s;
+    int (*compiled_main)(void);
+    
+    s = tcc_new();
+    if (!s) return 1;
+    
+    tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+    
+    // Add library search paths
+    tcc_add_library_path(s, "/usr/local/lib");
+    tcc_add_library_path(s, "./lib");
+    
+    // Add system libraries
+    tcc_add_library(s, "m");        // Math library
+    tcc_add_library(s, "pthread");  // Threading
+    
+    // Add custom library
+    tcc_add_library(s, "myutils");
+    
+    // Expose host symbols
+    tcc_add_symbol(s, "add", add);
+    tcc_add_symbol(s, "log_message", log_message);
+    tcc_add_symbol(s, "app_name", app_name);
+    
+    // Compile code that uses everything
+    const char *code =
+        "#include <stdio.h>\n"
+        "#include <math.h>\n"
+        "\n"
+        "extern int add(int, int);\n"
+        "extern void log_message(const char*);\n"
+        "extern const char app_name[];\n"
+        "\n"
+        "int main(void) {\n"
+        "    printf(\"Running %s\\n\", app_name);\n"
+        "    log_message(\"Starting calculation\");\n"
+        "    \n"
+        "    int result = add(5, 3);\n"
+        "    double sq = sqrt(result);\n"
+        "    \n"
+        "    printf(\"Result: %d, sqrt: %f\\n\", result, sq);\n"
+        "    log_message(\"Done\");\n"
+        "    return 0;\n"
+        "}\n";
+    
+    if (tcc_compile_string(s, code) < 0) {
+        tcc_delete(s);
+        return 1;
+    }
+    
+    // Relocate before getting symbols
+    if (tcc_relocate(s) < 0) {
+        tcc_delete(s);
+        return 1;
+    }
+    
+    // Get and run the compiled main function
+    compiled_main = tcc_get_symbol(s, "main");
+    if (!compiled_main) {
+        fprintf(stderr, "Could not find main\n");
+        tcc_delete(s);
+        return 1;
+    }
+    
+    compiled_main();
+    
+    tcc_delete(s);
+    return 0;
+}
+```
+
+## Platform-specific notes
+
+### Windows (PE format)
+
+On Windows, dynamically linked data needs the `dllimport` attribute:
+
+```c
+const char *code = 
+    "#ifdef _WIN32\n"
+    "__attribute__((dllimport))\n"
+    "#endif\n"
+    "extern const char config_path[];\n";
+```
+
+### Library search order
+
+Libraries are searched in this order:
+1. Paths specified with `tcc_add_library_path()`
+2. Default system paths (`/usr/local/lib`, `/usr/lib`, `/lib`)
+3. Paths from `LIBRARY_PATH` environment variable

@@ -1,80 +1,334 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick start
+description: Compile and run your first C program with TinyCC in under a minute
 ---
 
-## Get started in three steps
+# Quick start
 
-Get your documentation site running locally and make your first customization.
+This guide will get you up and running with TinyCC in just a few steps. You'll learn how to compile and run C programs using TCC's unique direct execution feature.
 
-### Step 1: Set up your local environment
+<Note>
+Before starting, make sure you have [installed TinyCC](/installation) on your system.
+</Note>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+## Your first TCC program
+
+Let's create and run a simple "Hello World" program using TCC.
+
+<Steps>
+  <Step title="Create a C source file">
+    Create a file named `hello.c` with the following content:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```c hello.c
+    #include <stdio.h>
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    int main()
+    {
+        printf("Hello World\n");
+        return 0;
+    }
+    ```
+  </Step>
+  
+  <Step title="Compile and run directly">
+    TCC's killer feature is the ability to compile and execute in one step:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    tcc -run hello.c
+    ```
+    
+    Output:
+    ```
+    Hello World
+    ```
+    
+    <Tip>
+    The `-run` option compiles the code in memory and executes it immediately without creating an executable file. This is perfect for quick testing and scripting!
+    </Tip>
+  </Step>
+  
+  <Step title="Create an executable (optional)">
+    If you want to create a standalone executable:
+    
+    ```bash
+    tcc hello.c -o hello
+    ./hello
+    ```
+    
+    This creates a binary file named `hello` that you can run anytime.
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## TCC as a C script interpreter
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+One of TCC's most powerful features is C scripting support. You can run C code like a shell script!
 
-### Step 3: Go live
+<Steps>
+  <Step title="Create a C script">
+    Create a file named `hello_script.c`:
+    
+    ```c hello_script.c
+    #!/usr/local/bin/tcc -run
+    #include <stdio.h>
+    
+    int main()
+    {
+        printf("Hello from a C script!\n");
+        return 0;
+    }
+    ```
+    
+    The first line is a shebang that tells your shell to use TCC to run the file.
+  </Step>
+  
+  <Step title="Make it executable">
+    Set the execute permission:
+    
+    ```bash
+    chmod +x hello_script.c
+    ```
+  </Step>
+  
+  <Step title="Run it directly">
+    Now you can run it like any shell script:
+    
+    ```bash
+    ./hello_script.c
+    ```
+    
+    Output:
+    ```
+    Hello from a C script!
+    ```
+  </Step>
+</Steps>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Note>
+If TCC is installed in a different location on your system, adjust the shebang path accordingly. Use `which tcc` to find the correct path.
+</Note>
+
+## Working with command line arguments
+
+C scripts can accept command line arguments just like any other program:
+
+```c args_demo.c
+#!/usr/local/bin/tcc -run
+#include <stdio.h>
+
+int main(int argc, char **argv)
+{
+    printf("Program name: %s\n", argv[0]);
+    printf("Number of arguments: %d\n\n", argc - 1);
+    
+    for (int i = 1; i < argc; i++) {
+        printf("Argument %d: %s\n", i, argv[i]);
+    }
+    
+    return 0;
+}
+```
+
+<CodeGroup>
+```bash Using -run
+tcc -run args_demo.c hello world 123
+```
+
+```bash As a script
+chmod +x args_demo.c
+./args_demo.c hello world 123
+```
+</CodeGroup>
+
+Output:
+```
+Program name: args_demo.c
+Number of arguments: 3
+
+Argument 1: hello
+Argument 2: world
+Argument 3: 123
+```
+
+## Compiling multiple files
+
+TCC can compile and link multiple C files together:
+
+<Steps>
+  <Step title="Create a utility module">
+    Create `utils.c`:
+    
+    ```c utils.c
+    #include <stdio.h>
+    
+    void greet(const char *name)
+    {
+        printf("Hello, %s!\n", name);
+    }
+    ```
+    
+    And its header `utils.h`:
+    
+    ```c utils.h
+    #ifndef UTILS_H
+    #define UTILS_H
+    
+    void greet(const char *name);
+    
+    #endif
+    ```
+  </Step>
+  
+  <Step title="Create the main program">
+    Create `main.c`:
+    
+    ```c main.c
+    #include "utils.h"
+    
+    int main()
+    {
+        greet("TinyCC");
+        return 0;
+    }
+    ```
+  </Step>
+  
+  <Step title="Compile and run">
+    Compile both files together:
+    
+    <CodeGroup>
+    ```bash Direct execution
+    tcc -run main.c utils.c
+    ```
+    
+    ```bash Create executable
+    tcc main.c utils.c -o myprogram
+    ./myprogram
+    ```
+    </CodeGroup>
+    
+    Output:
+    ```
+    Hello, TinyCC!
+    ```
+  </Step>
+</Steps>
+
+## Using TinyCC's built-in library
+
+TCC includes a minimal library `tcclib.h` that's perfect for small programs or systems without standard headers:
+
+```c minimal.c
+#!/usr/local/bin/tcc -run
+#include <tcclib.h>
+
+int main()
+{
+    printf("Hello World\n");
+    return 0;
+}
+```
+
+<Tip>
+Using `<tcclib.h>` instead of `<stdio.h>` results in faster compilation times. It's especially useful for floppy disk or embedded environments where space is limited.
+</Tip>
+
+## Compiling from stdin
+
+TCC can read and compile C code from standard input, which is great for one-liners and testing:
+
+```bash
+echo 'main(){puts("hello");}' | tcc -run -
+```
+
+Output:
+```
+hello
+```
+
+This technique is useful for quick experiments and integrating with shell pipelines.
+
+## Common compilation patterns
+
+<CodeGroup>
+```bash Compile and run
+tcc -run program.c
+```
+
+```bash Create executable
+tcc program.c -o program
+```
+
+```bash Compile to object file
+tcc -c program.c
+# Creates program.o
+```
+
+```bash Link object files
+tcc file1.o file2.o -o program
+```
+
+```bash Multiple source files
+tcc main.c utils.c helper.c -o program
+```
+
+```bash With include path
+tcc -I./include program.c -o program
+```
+
+```bash With library
+tcc program.c -lm -o program
+# Links with math library
+```
+</CodeGroup>
+
+## Comparing TCC with GCC
+
+Here's how TCC commands compare to GCC:
+
+| Task | TCC | GCC |
+|------|-----|-----|
+| Compile and run | `tcc -run hello.c` | `gcc hello.c -o hello && ./hello` |
+| Create executable | `tcc hello.c -o hello` | `gcc hello.c -o hello` |
+| Compile to object | `tcc -c hello.c` | `gcc -c hello.c` |
+| Show version | `tcc -v` | `gcc --version` |
+| Verbose output | `tcc -vv` | `gcc -v` |
+
+<Warning>
+TCC optimizes for compilation speed, not runtime performance. For production code where runtime speed matters, consider using GCC or Clang with optimization flags like `-O2` or `-O3`.
+</Warning>
+
+## Benchmarking compilation speed
+
+See the difference in compilation speed:
+
+```bash
+# TCC with benchmark
+tcc -bench hello.c -o hello
+
+# Compare with GCC
+time gcc -O0 hello.c -o hello_gcc
+time tcc hello.c -o hello_tcc
+```
+
+TCC typically compiles **9-10 times faster** than GCC with `-O0` (no optimization).
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Command line reference" icon="terminal" href="/cli/command-reference">
+    Learn about all TCC command line options and flags
+  </Card>
+  <Card title="C scripting guide" icon="scroll" href="/cli/scripting">
+    Master advanced C scripting techniques with TCC
+  </Card>
+  <Card title="libtcc API" icon="code" href="/api/overview">
+    Use TCC as a library for dynamic code generation
+  </Card>
+  <Card title="Features" icon="flask" href="/features/c-language-support">
+    Explore TCC features and capabilities
+  </Card>
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+<Tip>
+Try using TCC for your daily C development tasks. The instant compilation feedback makes it great for learning C, testing algorithms, and rapid prototyping.
+</Tip>

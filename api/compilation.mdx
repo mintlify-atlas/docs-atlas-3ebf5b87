@@ -1,0 +1,322 @@
+---
+title: Compilation
+description: Compiling C source code from strings and files
+---
+
+After initializing a TCC compilation context, you can compile C source code from strings or files.
+
+## Compiling from strings
+
+### tcc_compile_string
+
+Compiles a C source code string.
+
+```c
+int tcc_compile_string(TCCState *s, const char *buf);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="buf" type="const char*" required>
+  Null-terminated string containing C source code.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success, -1 on error.
+</ResponseField>
+
+**Example:**
+
+```c
+const char *code = 
+    "#include <stdio.h>\n"
+    "void hello(void) {\n"
+    "    printf(\"Hello from TCC!\\n\");\n"
+    "}\n";
+
+if (tcc_compile_string(s, code) < 0) {
+    fprintf(stderr, "Compilation failed\n");
+    return 1;
+}
+```
+
+<Warning>
+You must call `tcc_set_output_type()` before calling `tcc_compile_string()`.
+</Warning>
+
+### Better error reporting with #line
+
+For more specific error messages, prefix your code with a `#line` directive:
+
+```c
+const char *code = 
+    "#line 1 \"mycode.c\"\n"
+    "int add(int a, int b) {\n"
+    "    return a + b\n"  // Error: missing semicolon
+    "}\n";
+
+if (tcc_compile_string(s, code) < 0) {
+    // Error will be reported as: mycode.c:3: error: ...
+    return 1;
+}
+```
+
+### tcc_compile_string_file
+
+Compiles a C source string and optionally writes it to a file for debugging.
+
+```c
+int tcc_compile_string_file(TCCState *s, const char *buf, const char *filename);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="buf" type="const char*" required>
+  Null-terminated string containing C source code.
+</ParamField>
+
+<ParamField path="filename" type="const char*">
+  If debugging is enabled, the source will be written to this file.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success, -1 on error.
+</ResponseField>
+
+**Example:**
+
+```c
+// Enable debugging with -g option
+tcc_set_options(s, "-g");
+
+// This will write code to "debug.c" if debugging is enabled
+tcc_compile_string_file(s, code, "debug.c");
+```
+
+## Compiling from files
+
+### tcc_add_file
+
+Adds a file to the compilation. The file can be:
+- C source file (`.c`, `.h`)
+- Assembly file (`.s`, `.S`)
+- Object file (`.o`)
+- Library (`.a`, `.so`, `.dll`)
+- Linker script
+
+```c
+int tcc_add_file(TCCState *s, const char *filename);
+```
+
+<ParamField path="s" type="TCCState*" required>
+  The compilation context.
+</ParamField>
+
+<ParamField path="filename" type="const char*" required>
+  Path to the file to compile or link.
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Returns 0 on success, -1 on error.
+</ResponseField>
+
+**Example:**
+
+<CodeGroup>
+
+```c Compiling C source
+if (tcc_add_file(s, "main.c") < 0) {
+    fprintf(stderr, "Failed to compile main.c\n");
+    return 1;
+}
+
+if (tcc_add_file(s, "utils.c") < 0) {
+    fprintf(stderr, "Failed to compile utils.c\n");
+    return 1;
+}
+```
+
+```c Linking object files
+// Compile to object first
+tcc_set_output_type(s1, TCC_OUTPUT_OBJ);
+tcc_add_file(s1, "module.c");
+tcc_output_file(s1, "module.o");
+tcc_delete(s1);
+
+// Link object file
+TCCState *s2 = tcc_new();
+tcc_set_output_type(s2, TCC_OUTPUT_MEMORY);
+tcc_add_file(s2, "module.o");
+```
+
+```c Adding libraries
+// Add static library
+tcc_add_file(s, "libmylib.a");
+
+// Add shared library
+tcc_add_file(s, "libmylib.so");
+```
+
+</CodeGroup>
+
+## Multiple compilation units
+
+You can compile multiple source files together:
+
+```c
+TCCState *s = tcc_new();
+tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+
+// Add multiple source files
+tcc_add_file(s, "main.c");
+tcc_add_file(s, "utils.c");
+tcc_add_file(s, "data.c");
+
+// Add libraries
+tcc_add_library(s, "m");  // libm (math library)
+
+// Relocate and run
+tcc_relocate(s);
+int (*main_func)(int, char**) = tcc_get_symbol(s, "main");
+```
+
+## Dynamic compilation patterns
+
+### Compiling generated code
+
+```c
+#include "libtcc.h"
+#include <stdio.h>
+#include <string.h>
+
+char* generate_function(const char *name, const char *operation) {
+    static char buffer[1024];
+    snprintf(buffer, sizeof(buffer),
+        "int %s(int a, int b) {\n"
+        "    return a %s b;\n"
+        "}\n",
+        name, operation);
+    return buffer;
+}
+
+int main() {
+    TCCState *s = tcc_new();
+    tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+    
+    // Generate and compile code dynamically
+    char *code = generate_function("multiply", "*");
+    tcc_compile_string(s, code);
+    
+    tcc_relocate(s);
+    
+    int (*multiply)(int, int) = tcc_get_symbol(s, "multiply");
+    printf("5 * 7 = %d\n", multiply(5, 7));
+    
+    tcc_delete(s);
+    return 0;
+}
+```
+
+### Incremental compilation
+
+```c
+TCCState *s = tcc_new();
+tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+
+// Compile base functionality
+tcc_compile_string(s, 
+    "int base_value = 100;\n"
+    "int get_base() { return base_value; }\n");
+
+// Add more functions incrementally
+tcc_compile_string(s,
+    "extern int get_base();\n"
+    "int compute() { return get_base() * 2; }\n");
+
+// All functions are available after relocation
+tcc_relocate(s);
+```
+
+### Template-based code generation
+
+```c
+const char *template = 
+    "#include <stdio.h>\n"
+    "typedef %s data_t;\n"
+    "void print_data(data_t val) {\n"
+    "    printf(\"%s: %s\\n\", (%s)val);\n"
+    "}\n";
+
+char code[1024];
+
+// Generate int version
+snprintf(code, sizeof(code), template, "int", "int", "%d", "int");
+tcc_compile_string(s, code);
+
+// Generate double version
+snprintf(code, sizeof(code), template, "double", "double", "%f", "double");
+tcc_compile_string(s, code);
+```
+
+## Compilation with includes
+
+When compiling code that uses standard library headers:
+
+```c
+TCCState *s = tcc_new();
+
+// Set up include paths
+tcc_add_include_path(s, "/usr/include");
+tcc_add_sysinclude_path(s, "/usr/local/include");
+
+tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+
+// Now you can use standard headers
+const char *code = 
+    "#include <stdio.h>\n"
+    "#include <stdlib.h>\n"
+    "#include <string.h>\n"
+    "\n"
+    "void process_string(const char *str) {\n"
+    "    char *copy = strdup(str);\n"
+    "    printf(\"Processing: %s\\n\", copy);\n"
+    "    free(copy);\n"
+    "}\n";
+
+tcc_compile_string(s, code);
+```
+
+## Error handling during compilation
+
+```c
+void compilation_error(void *opaque, const char *msg) {
+    fprintf(stderr, "Compilation error: %s\n", msg);
+}
+
+TCCState *s = tcc_new();
+tcc_set_error_func(s, NULL, compilation_error);
+tcc_set_output_type(s, TCC_OUTPUT_MEMORY);
+
+const char *buggy_code = 
+    "int broken() {\n"
+    "    return undefined_var;\n"  // Error: undefined variable
+    "}\n";
+
+if (tcc_compile_string(s, buggy_code) < 0) {
+    fprintf(stderr, "Compilation failed, aborting\n");
+    tcc_delete(s);
+    return 1;
+}
+```
+
+## Best practices
+
+- Always check return values from `tcc_compile_string()` and `tcc_add_file()`
+- Use `#line` directives for better error messages when compiling generated code
+- Set up error handlers before compilation for better diagnostics
+- For large projects, consider compiling to object files first, then linking
+- When generating code, validate your templates to avoid syntax errors

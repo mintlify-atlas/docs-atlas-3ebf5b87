@@ -1,0 +1,411 @@
+---
+title: Automatic bounds and memory checking
+description: Runtime memory safety with TinyCC's automatic bounds checking system
+---
+
+TCC can automatically generate memory and bound checks while allowing all C pointer operations. This feature can detect buffer overflows, invalid memory access, and other common memory errors at runtime, even when using non-patched libraries.
+
+<Info>
+Bounds checking is activated with the `-b` command-line option. When enabled, TCC defines the `__TCC_BCHECK__` macro.
+</Info>
+
+## How it works
+
+The bounds checker instruments your code to track memory regions and validate all pointer accesses at runtime. It maintains a tree of valid memory regions and checks every pointer dereference against this tree.
+
+```bash
+# Compile with bounds checking
+tcc -b -o program main.c
+
+# Also enables debug info (-g is implied)
+./program
+```
+
+## Types of errors detected
+
+TinyCC's bounds checker can detect numerous memory safety violations:
+
+### Buffer overflow
+
+<Accordion title="Invalid range with standard string function">
+```c
+char tab[10];
+memset(tab, 0, 11);  // Error: writing 11 bytes to 10-byte buffer
+```
+
+**Runtime error:**
+```
+BCHECK: invalid pointer 0x7ffd1234abcd (size 11) is outside of the region
+```
+</Accordion>
+
+<Accordion title="Out of bounds in global or local arrays">
+```c
+int tab[10];
+int sum = 0;
+for(int i = 0; i < 11; i++) {  // i goes to 10, out of bounds!
+    sum += tab[i];
+}
+```
+
+**Runtime error:**
+```
+BCHECK: invalid pointer 0x... (size 4) is outside of the region (0x...0x...)
+```
+</Accordion>
+
+<Accordion title="Out of bounds in malloc'ed data">
+```c
+int *tab = malloc(20 * sizeof(int));
+for(int i = 0; i < 21; i++) {  // Accessing 21 elements, only 20 allocated
+    sum += tab[i];
+}
+free(tab);
+```
+
+Detects heap buffer overflow.
+</Accordion>
+
+### Use-after-free
+
+<Accordion title="Access of freed memory">
+```c
+int *tab = malloc(20 * sizeof(int));
+free(tab);
+for(int i = 0; i < 20; i++) {
+    sum += tab[i];  // Error: accessing freed memory
+}
+```
+
+**Runtime error:**
+```
+BCHECK: freeing invalid region
+```
+</Accordion>
+
+<Accordion title="Double free">
+```c
+int *tab = malloc(20 * sizeof(int));
+free(tab);
+free(tab);  // Error: double free
+```
+
+Detects multiple frees of the same pointer.
+</Accordion>
+
+## Environment variables
+
+Control bounds checking behavior with environment variables:
+
+<CodeGroup>
+
+```bash Pointer addition warnings
+export TCC_BOUNDS_WARN_POINTER_ADD=1
+./program
+
+# Warns when pointer arithmetic creates invalid pointers
+# (even if they're not dereferenced)
+```
+
+```bash Debug output
+export TCC_BOUNDS_PRINT_CALLS=1
+./program
+
+# Print all bound checking calls for debugging
+```
+
+```bash Memory leak detection
+export TCC_BOUNDS_PRINT_HEAP=1
+./program
+
+# Print heap objects not freed at program exit
+```
+
+```bash Statistics
+export TCC_BOUNDS_PRINT_STATISTIC=1
+./program
+
+# Print statistics at exit:
+# - Number of bound checks performed
+# - malloc/free counts
+# - Not found regions
+```
+
+```bash Non-fatal mode
+export TCC_BOUNDS_NEVER_FATAL=1
+./program
+
+# Continue execution after bound errors
+# (for testing/debugging only)
+```
+
+</CodeGroup>
+
+<Warning>
+`TCC_BOUNDS_NEVER_FATAL` should only be used for debugging. Running with invalid memory access can lead to crashes or data corruption.
+</Warning>
+
+## Controlling bounds checking in code
+
+You can enable/disable bounds checking at runtime using the API:
+
+```c
+#ifdef __TCC_BCHECK__
+extern void __bounds_checking(int x);
+# define BOUNDS_CHECKING_OFF __bounds_checking(1)
+# define BOUNDS_CHECKING_ON  __bounds_checking(-1)
+#else
+# define BOUNDS_CHECKING_OFF
+# define BOUNDS_CHECKING_ON
+#endif
+
+void signal_handler(int sig) {
+    // Disable checking in signal handler (required!)
+    BOUNDS_CHECKING_OFF;
+    
+    // Handle signal
+    fprintf(stderr, "Signal %d caught\n", sig);
+    
+    BOUNDS_CHECKING_ON;
+}
+
+void performance_critical_section() {
+    // Temporarily disable checking for performance
+    BOUNDS_CHECKING_OFF;
+    
+    // Fast unchecked code
+    for (int i = 0; i < 1000000; i++) {
+        process_data(i);
+    }
+    
+    BOUNDS_CHECKING_ON;
+}
+```
+
+<Info>
+The `__bounds_checking(x)` function adds `x` to a thread-local counter. When this counter is non-zero, bounds checking is disabled for that thread.
+</Info>
+
+## Platform support
+
+Bounds checking is available on:
+
+- **i386** (Linux and Windows)
+- **x86_64** (Linux and Windows)
+- **ARM**
+- **ARM64** (aarch64)
+- **RISC-V 64**
+
+<Note>
+Bounds checking is not available on all platforms. Check your specific TCC build for support.
+</Note>
+
+## Performance and compatibility
+
+### Performance impact
+
+<Accordion title="Code size and speed">
+- **Generated code is larger**: Instrumentation adds checks before each pointer access
+- **Slower execution**: Runtime validation has overhead (typically 2-10x slower)
+- **Memory overhead**: Maintains tree of memory regions
+
+Example overhead:
+```c
+// Normal: ~0.1s for 1M iterations
+// With -b: ~0.5-1.0s for 1M iterations
+```
+</Accordion>
+
+### Compatibility notes
+
+<Warning>
+**Important limitations:**
+
+1. **Shared libraries**: The bounds checking code is not included in shared libraries. The main executable must always be compiled with `-b`.
+
+2. **Signal handlers**: Not compatible with bounds checking. The checker automatically disables checking in signal/sigaction handlers.
+
+3. **fork() in multithreaded apps**: Can cause issues. The bounds checking code fixes this for the child process, but be aware of potential problems.
+
+4. **Locking**: The checker uses internal locks. This is why signals and fork() have issues.
+</Warning>
+
+### Checked code interoperability
+
+<Info>
+**Major advantages:**
+
+- **Pointer size unchanged**: No modifications to pointer representation
+- **Binary compatible**: Checked and unchecked code can be mixed freely
+- **Library compatible**: Works with non-patched libraries
+- **Supports all C pointer operations**: Even obscure casts work correctly
+
+When a pointer comes from unchecked code, it's assumed to be valid.
+</Info>
+
+```c
+// checked_main.c (compiled with -b)
+#include <string.h>  // System library (unchecked)
+
+int main() {
+    char buf[10];
+    
+    // Calls unchecked system strcpy, but parameters are checked
+    strcpy(buf, "hello");  // OK
+    
+    strcpy(buf, "this is way too long");  // Error detected!
+    
+    return 0;
+}
+```
+
+## Practical examples
+
+### Basic usage
+
+<CodeGroup>
+
+```c test.c - Program to check
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+    int *arr = malloc(10 * sizeof(int));
+    
+    // This will be caught
+    for (int i = 0; i <= 10; i++) {
+        arr[i] = i;  // Error at i=10
+    }
+    
+    free(arr);
+    return 0;
+}
+```
+
+```bash Compile and run
+# Compile with bounds checking
+tcc -b -o test test.c
+
+# Run the program
+./test
+
+# Output:
+# BCHECK: invalid pointer 0x... (size 4) is outside of the region
+# [Stack trace follows]
+```
+
+</CodeGroup>
+
+### Advanced usage with debugging
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+#ifdef __TCC_BCHECK__
+extern void __bounds_checking(int x);
+#define BOUNDS_OFF __bounds_checking(1)
+#define BOUNDS_ON  __bounds_checking(-1)
+#else
+#define BOUNDS_OFF
+#define BOUNDS_ON
+#endif
+
+int main() {
+    int *data = malloc(100 * sizeof(int));
+    
+    // Initialize with checking
+    for (int i = 0; i < 100; i++) {
+        data[i] = i;
+    }
+    
+    // Verify bounds work
+    printf("Accessing index 99: %d\n", data[99]);  // OK
+    
+    // This would fail:
+    // printf("Accessing index 100: %d\n", data[100]);
+    
+    free(data);
+    
+    // This would also fail (use after free):
+    // printf("After free: %d\n", data[0]);
+    
+    return 0;
+}
+```
+
+### Integration with backtrace
+
+```bash
+# Combine bounds checking with backtrace
+tcc -b -bt -o program program.c
+
+# When an error occurs, you get a full stack trace
+./program
+```
+
+<Tip>
+Use `-bt[N]` to display N callers in stack traces. When activated, `__TCC_BACKTRACE__` is defined, and a function `int tcc_backtrace(const char *fmt, ...)` is available to manually trigger stack traces.
+</Tip>
+
+## Implementation details
+
+For those interested in how it works:
+
+### Memory region tracking
+
+From `lib/bcheck.c`:
+
+```c
+typedef struct tree_node Tree;
+struct tree_node {
+    Tree *left, *right;
+    size_t start;           // Region start address
+    size_t size;            // Region size
+    unsigned char type;     // TCC_TYPE_MALLOC, etc.
+    unsigned char is_invalid;  // True after free()
+};
+```
+
+The checker maintains a splay tree of all valid memory regions:
+- Stack variables (local arrays)
+- Heap allocations (malloc, calloc, realloc)
+- Global/static variables
+- alloca() allocations
+
+### Checked functions
+
+The following functions are automatically wrapped:
+
+**Memory functions:**
+- `malloc`, `calloc`, `realloc`, `free`
+- `memalign` (on supported platforms)
+- `mmap`, `munmap` (Unix)
+
+**String functions:**
+- `memcpy`, `memcmp`, `memmove`, `memset`
+- `strlen`, `strcpy`, `strncpy`
+- `strcmp`, `strncmp`
+- `strcat`, `strncat`
+- `strchr`, `strrchr`
+- `strdup`
+
+<Note>
+All checks are performed at runtime with minimal overhead, optimized using a splay tree data structure for fast lookups.
+</Note>
+
+## Best practices
+
+1. **Development**: Always use `-b` during development to catch memory errors early
+2. **Testing**: Run your test suite with bounds checking enabled
+3. **Production**: Consider disabling for performance (after thorough testing)
+4. **Debugging**: Combine with `-g` and `-bt` for maximum debug information
+5. **Signal handlers**: Always disable checking in signal handlers using `__bounds_checking(1)`
+
+```bash
+# Development build
+tcc -b -g -bt -o myapp main.c
+
+# Production build (no bounds checking)
+tcc -O2 -o myapp main.c
+```

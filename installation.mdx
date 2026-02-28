@@ -1,0 +1,226 @@
+---
+title: Installation
+description: Install TinyCC on Linux, BSD, macOS, or Windows
+---
+
+# Installation
+
+TinyCC is designed to be easy to build and install on all major platforms. Follow the instructions for your operating system below.
+
+## Linux and macOS
+
+<Steps>
+  <Step title="Download the source">
+    Clone the TinyCC repository or download the latest release tarball:
+    
+    ```bash
+    git clone git://repo.or.cz/tinycc.git
+    cd tinycc
+    ```
+  </Step>
+  
+  <Step title="Configure the build">
+    Run the configure script to detect your system and set up the build:
+    
+    ```bash
+    ./configure
+    ```
+    
+    <Tip>
+    Run `./configure --help` to see available configuration options, such as custom installation paths or cross-compilation settings.
+    </Tip>
+    
+    Common configuration options:
+    
+    ```bash
+    # Install to a custom location
+    ./configure --prefix=/opt/tcc
+    
+    # Enable cross-compilation support
+    ./configure --enable-cross
+    
+    # Disable documentation generation
+    ./configure --disable-doc
+    ```
+  </Step>
+  
+  <Step title="Build TinyCC">
+    Compile the TCC binary:
+    
+    ```bash
+    make
+    ```
+    
+    This typically takes just a few seconds on modern hardware.
+  </Step>
+  
+  <Step title="Run tests (optional)">
+    Verify that TCC works correctly on your system:
+    
+    ```bash
+    make test
+    ```
+    
+    The test suite runs various C programs through TCC to ensure correctness.
+  </Step>
+  
+  <Step title="Install TinyCC">
+    Install TCC to your system (requires root/sudo):
+    
+    ```bash
+    make install
+    ```
+    
+    By default, TCC installs to `/usr/local/bin`. The installation includes:
+    - `tcc` binary in `/usr/local/bin`
+    - TCC libraries in `/usr/local/lib/tcc`
+    - Include files in `/usr/local/lib/tcc/include`
+  </Step>
+  
+  <Step title="Verify installation">
+    Check that TCC is installed and working:
+    
+    ```bash
+    tcc -v
+    ```
+    
+    This should display the TCC version information.
+  </Step>
+</Steps>
+
+<Note>
+The `makeinfo` tool must be installed to compile the documentation. If you don't need the documentation, you can skip this requirement or disable it with `./configure --disable-doc`.
+</Note>
+
+## BSD systems
+
+On BSD variants (FreeBSD, OpenBSD, NetBSD), the installation process is nearly identical to Linux, with one important difference:
+
+<Warning>
+Use `gmake` (GNU Make) instead of `make` on BSD systems.
+</Warning>
+
+<Steps>
+  <Step title="Install GNU Make">
+    If `gmake` is not already installed:
+    
+    ```bash FreeBSD
+    pkg install gmake
+    ```
+    
+    ```bash OpenBSD
+    pkg_add gmake
+    ```
+    
+    ```bash NetBSD
+    pkgin install gmake
+    ```
+  </Step>
+  
+  <Step title="Build and install">
+    Follow the same steps as Linux, but use `gmake` instead of `make`:
+    
+    ```bash
+    ./configure
+    gmake
+    gmake test
+    gmake install
+    ```
+  </Step>
+</Steps>
+
+## Windows
+
+For Windows installation, TinyCC provides native Win32 support.
+
+<Steps>
+  <Step title="Download Windows binary">
+    The easiest way to get TCC on Windows is to download a pre-built binary from the official release page.
+    
+    Alternatively, you can build from source using MinGW or MSYS2.
+  </Step>
+  
+  <Step title="Extract the archive">
+    Extract the TCC archive to a directory, such as `C:\tcc`.
+  </Step>
+  
+  <Step title="Add to PATH">
+    Add the TCC directory to your system PATH environment variable to run `tcc` from anywhere.
+  </Step>
+  
+  <Step title="Verify installation">
+    Open Command Prompt and verify TCC is working:
+    
+    ```cmd
+    tcc -v
+    ```
+  </Step>
+</Steps>
+
+<Note>
+For detailed Windows-specific information, including building from source on Windows, refer to `tcc-win32.txt` in the TCC source distribution.
+</Note>
+
+## Configuration options
+
+The `./configure` script accepts several options to customize your installation:
+
+| Option | Description |
+|--------|-------------|
+| `--prefix=DIR` | Install TCC to directory DIR (default: `/usr/local`) |
+| `--bindir=DIR` | Install binaries to DIR (default: `PREFIX/bin`) |
+| `--libdir=DIR` | Install libraries to DIR (default: `PREFIX/lib`) |
+| `--includedir=DIR` | Install includes to DIR (default: `PREFIX/include`) |
+| `--enable-cross` | Build cross-compilers for all supported architectures |
+| `--disable-static` | Don't build static library |
+| `--config-predefs=yes` | Force use of system predefined macros |
+| `--cpu=x86_64` | Explicitly set target CPU architecture |
+
+<Tip>
+For cross-compilation support (building code for different architectures), use `--enable-cross` during configuration. This allows you to compile ARM code on x86_64, for example.
+</Tip>
+
+## System requirements
+
+### Build dependencies
+
+- C compiler (GCC, Clang, or another C compiler to bootstrap TCC)
+- GNU Make (or `gmake` on BSD)
+- Standard development tools (`ar`, `sed`, etc.)
+- Optional: `makeinfo` for building documentation
+
+### Runtime dependencies
+
+TCC has minimal runtime dependencies:
+- Standard C library (glibc, musl, or system libc)
+- Dynamic linker (for shared library support)
+
+<Note>
+Once built, TCC itself is self-contained and doesn't require GCC or any other compiler to be installed for using it.
+</Note>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="configure: command not found">
+    Make sure you've downloaded the source code and are in the correct directory. The configure script should be in the root of the TCC source tree.
+  </Accordion>
+  
+  <Accordion title="make: command not found on BSD">
+    Use `gmake` instead of `make` on BSD systems. Install GNU Make if it's not already available.
+  </Accordion>
+  
+  <Accordion title="Permission denied during make install">
+    You need root privileges to install to system directories. Use `sudo make install` or configure with a different `--prefix` that you have write access to.
+  </Accordion>
+  
+  <Accordion title="Test failures">
+    Some tests may fail on certain systems or configurations. If only a few tests fail and TCC works for basic programs, this is usually acceptable for personal use. Check the TCC mailing list or issue tracker for known issues.
+  </Accordion>
+</AccordionGroup>
+
+## Next steps
+
+<Card title="Quick start guide" icon="rocket" href="/quickstart">
+  Now that TCC is installed, try compiling your first program
+</Card>

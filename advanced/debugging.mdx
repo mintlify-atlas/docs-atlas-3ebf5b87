@@ -1,0 +1,445 @@
+---
+title: Debugging support
+description: Debug information, stack traces, and symbol support in TinyCC
+---
+
+TinyCC provides multiple debugging capabilities including debug symbols, runtime backtraces, and integration with standard debuggers.
+
+## Debug information formats
+
+TinyCC supports two debug information formats:
+
+- **STABS** - Default debug format (traditional Unix format)
+- **DWARF** - Modern debug format (versions 2-5)
+
+### Generating debug symbols
+
+<CodeGroup>
+
+```bash STABS
+# Compile with STABS debug information (default)
+tcc -g program.c -o program
+
+# Run with debug info
+./program
+```
+
+```bash DWARF
+# Compile with DWARF debug information
+tcc -gdwarf program.c -o program
+
+# Specify DWARF version (2-5)
+tcc -gdwarf-4 program.c -o program
+tcc -gdwarf-5 program.c -o program
+```
+
+</CodeGroup>
+
+<Note>
+DWARF debug information provides better compatibility with modern debuggers like GDB and LLDB.
+</Note>
+
+## Runtime backtraces
+
+TinyCC can generate stack backtraces at runtime without external tools.
+
+### Enabling backtraces
+
+<Steps>
+
+<Step title="Compile with backtrace support">
+
+Use the `-bt` option to enable runtime stack traces:
+
+```bash
+# Enable backtraces with default depth (6 frames)
+tcc -g -bt program.c -o program
+
+# Enable backtraces with custom depth (N frames)
+tcc -g -bt[N] program.c -o program
+```
+
+Example with custom depth:
+
+```bash
+# Show up to 10 callers in stack traces
+tcc -g -bt10 program.c -o program
+```
+
+</Step>
+
+<Step title="Run the program">
+
+When a runtime error occurs, TCC automatically prints a stack trace:
+
+```bash
+./program
+```
+
+Output example:
+
+```
+test.c:68: in function 'test5()': dereferencing invalid pointer
+test.c:75: by main
+```
+
+</Step>
+
+</Steps>
+
+### Backtrace API
+
+When compiled with `-bt`, the `__TCC_BACKTRACE__` macro is defined and you can trigger backtraces programmatically:
+
+```c
+#ifdef __TCC_BACKTRACE__
+#include <stdio.h>
+
+// Function prototype provided by TCC
+int tcc_backtrace(const char *fmt, ...);
+
+int main() {
+    // Trigger a backtrace on demand
+    tcc_backtrace("Debug checkpoint reached\n");
+    
+    // Conditional backtrace
+    if (error_condition) {
+        tcc_backtrace("Error detected: %s\n", error_msg);
+    }
+    
+    return 0;
+}
+#endif
+```
+
+## Using standard debuggers
+
+### GDB integration
+
+TinyCC-generated executables can be debugged with GDB:
+
+<Steps>
+
+<Step title="Compile with debug symbols">
+
+```bash
+tcc -g -o program program.c
+```
+
+</Step>
+
+<Step title="Run GDB">
+
+```bash
+gdb ./program
+```
+
+</Step>
+
+<Step title="Debug commands">
+
+Common GDB commands:
+
+```gdb
+# Set breakpoint
+(gdb) break main
+(gdb) break program.c:42
+
+# Run program
+(gdb) run [args]
+
+# Step through code
+(gdb) next      # Step over
+(gdb) step      # Step into
+(gdb) continue  # Continue execution
+
+# Examine variables
+(gdb) print variable_name
+(gdb) info locals
+
+# View backtrace
+(gdb) backtrace
+(gdb) bt
+```
+
+</Step>
+
+</Steps>
+
+### DWARF with GDB
+
+For better GDB compatibility, use DWARF debug format:
+
+```bash
+# Compile with DWARF 4
+tcc -gdwarf-4 program.c -o program
+
+# Configure TinyCC to use DWARF by default
+./configure --config-dwarf=4
+make
+```
+
+<Tip>
+DWARF 4 and 5 provide the best compatibility with modern versions of GDB (7.0+).
+</Tip>
+
+## Debug-only code
+
+Use preprocessor macros to include debug-only code:
+
+```c
+#include <stdio.h>
+
+#ifdef DEBUG
+#define DEBUG_PRINT(fmt, ...) \
+    fprintf(stderr, "DEBUG: " fmt, ##__VA_ARGS__)
+#else
+#define DEBUG_PRINT(fmt, ...) /* nothing */
+#endif
+
+int main() {
+    int value = 42;
+    
+    DEBUG_PRINT("Value is: %d\n", value);
+    
+    return 0;
+}
+```
+
+Compile with debug macros:
+
+```bash
+# Enable debug output
+tcc -DDEBUG -g program.c -o program
+
+# Production build (no debug output)
+tcc program.c -o program
+```
+
+## Bounds checking
+
+TinyCC includes optional runtime bounds checking to detect memory errors.
+
+### Enabling bounds checking
+
+```bash
+# Compile with bounds checking
+tcc -b program.c -o program
+
+# Bounds checking implies -g
+tcc -b program.c -o program
+```
+
+<Note>
+Bounds checking is available on i386, x86_64, ARM, ARM64, and RISC-V 64.
+</Note>
+
+### Types of errors detected
+
+Bounds checking catches:
+
+<CodeGroup>
+
+```c Array bounds
+// Out of bounds array access
+int tab[10];
+for (int i = 0; i < 11; i++) {
+    sum += tab[i];  // Error on i=10
+}
+```
+
+```c Invalid memory
+// Invalid range with standard functions
+char tab[10];
+memset(tab, 0, 11);  // Error: writes past end
+```
+
+```c Use after free
+// Access freed memory
+int *tab = malloc(20 * sizeof(int));
+free(tab);
+tab[0] = 42;  // Error: use after free
+```
+
+```c Double free
+// Free same pointer twice
+int *tab = malloc(20 * sizeof(int));
+free(tab);
+free(tab);  // Error: double free
+```
+
+</CodeGroup>
+
+### Bounds checking environment variables
+
+Control bounds checking behavior:
+
+```bash
+# Print warning when pointer add creates illegal pointer
+export TCC_BOUNDS_WARN_POINTER_ADD=1
+
+# Print bound checking calls (for debugging)
+export TCC_BOUNDS_PRINT_CALLS=1
+
+# Print heap objects not freed at exit
+export TCC_BOUNDS_PRINT_HEAP=1
+
+# Print statistics at exit
+export TCC_BOUNDS_PRINT_STATISTIC=1
+
+# Continue execution after bound error (unsafe)
+export TCC_BOUNDS_NEVER_FATAL=1
+
+# Run program with bounds checking
+./program
+```
+
+### Disabling bounds checking in code
+
+Temporarily disable bounds checking for specific code sections:
+
+```c
+#ifdef __TCC_BCHECK__
+extern void __bounds_checking(int x);
+#define BOUNDS_CHECKING_OFF __bounds_checking(1)
+#define BOUNDS_CHECKING_ON  __bounds_checking(-1)
+#else
+#define BOUNDS_CHECKING_OFF
+#define BOUNDS_CHECKING_ON
+#endif
+
+void performance_critical_function() {
+    BOUNDS_CHECKING_OFF;
+    
+    // Fast code without bounds checks
+    for (int i = 0; i < 1000000; i++) {
+        // ... tight loop ...
+    }
+    
+    BOUNDS_CHECKING_ON;
+}
+```
+
+<Warning>
+Disabling bounds checking should only be done in performance-critical sections where memory safety is guaranteed.
+</Warning>
+
+## Symbol information
+
+TinyCC preserves symbol information for debugging and dynamic linking.
+
+### Viewing symbols
+
+```bash
+# View symbols in executable
+nm program
+
+# View only defined symbols
+nm -g program
+
+# Use readelf for detailed symbol table
+readelf -s program
+
+# Use objdump for symbol information
+objdump -t program
+```
+
+### Exporting symbols
+
+```bash
+# Export all global symbols (useful for dlopen)
+tcc -rdynamic program.c -o program
+
+# Equivalent linker option
+tcc -Wl,--export-dynamic program.c -o program
+```
+
+## Debug information in shared libraries
+
+Compile shared libraries with debug symbols:
+
+```bash
+# Create shared library with debug info
+tcc -shared -g -o libmylib.so mylib.c
+
+# Use library with debug symbols
+tcc -g program.c -L. -lmylib -o program
+
+# Debug with GDB
+gdb ./program
+```
+
+<Note>
+Bounds checking code is not included in shared libraries. The main executable must be compiled with `-b` for bounds checking.
+</Note>
+
+## Runtime debugging with -run
+
+Debug code directly with `-run`:
+
+```bash
+# Run with backtraces enabled
+tcc -g -bt -run program.c arg1 arg2
+
+# Run with bounds checking
+tcc -b -run program.c
+
+# Combine options
+tcc -g -bt -b -run program.c
+```
+
+Errors are reported with full context:
+
+```
+program.c:15: in function 'process_data': invalid memory access
+program.c:42: by main
+```
+
+## Profiling support
+
+Create a profiling version of TCC:
+
+```bash
+# Build profiling version
+make tcc_p
+
+# Use for profiling
+./tcc_p program.c -o program
+```
+
+## Limitations
+
+<Warning>
+**Debug limitations**:
+
+- Signal handlers are not compatible with bounds checking
+- Fork in multi-threaded applications may cause issues with bounds checking
+- Generated code with `-b` is slower and larger
+- Some optimizations are disabled with debug symbols
+</Warning>
+
+## Configuration
+
+### Build-time debug configuration
+
+Configure debug features during TCC compilation:
+
+```bash
+# Disable backtrace support
+./configure --config-backtrace=no
+
+# Disable bounds checking
+./configure --config-bcheck=no
+
+# Set DWARF version (2-5)
+./configure --config-dwarf=4
+
+# Debug TCC itself
+./configure --debug
+```
+
+## See also
+
+- [Configuration](/advanced/configuration) - Build configuration options
+- [API Reference](/api/compilation) - Compilation flags
+- [Quickstart](/quickstart) - Getting started guide

@@ -1,0 +1,469 @@
+---
+title: C scripting with TCC
+description: Use TCC to write and execute C programs as scripts with shebang support
+---
+
+TCC can be invoked from scripts just like shell scripts, allowing you to write executable C programs with a shebang line. This enables C to be used for scripting tasks while maintaining the performance and type safety of compiled code.
+
+## Basic scripting
+
+### Using shebang
+
+Add a shebang line at the start of your C source file to make it executable:
+
+```c hello.c
+#!/usr/local/bin/tcc -run
+#include <stdio.h>
+
+int main()
+{
+    printf("Hello World\n");
+    return 0;
+}
+```
+
+Make the file executable and run it:
+
+```bash
+chmod +x hello.c
+./hello.c
+```
+
+Output:
+```
+Hello World
+```
+
+<Note>
+  The shebang path may vary depending on where TCC is installed. Common paths are:
+  - `/usr/local/bin/tcc`
+  - `/usr/bin/tcc`
+  
+  Use `which tcc` to find the correct path on your system.
+</Note>
+
+### Portable shebang
+
+For better portability across different systems, use `env`:
+
+```c
+#!/usr/bin/env tcc -run
+#include <stdio.h>
+
+int main()
+{
+    printf("Portable script\n");
+    return 0;
+}
+```
+
+This searches for `tcc` in the `PATH` environment variable.
+
+## Command-line arguments
+
+### Accessing arguments
+
+Script arguments are passed to the `main()` function:
+
+```c script_args.c
+#!/usr/local/bin/tcc -run
+#include <stdio.h>
+
+int main(int argc, char **argv)
+{
+    printf("Script: %s\n", argv[0]);
+    printf("Arguments: %d\n", argc - 1);
+    
+    for (int i = 1; i < argc; i++) {
+        printf("  arg[%d]: %s\n", i, argv[i]);
+    }
+    
+    return 0;
+}
+```
+
+Run with arguments:
+
+```bash
+chmod +x script_args.c
+./script_args.c hello world 123
+```
+
+Output:
+```
+Script: ./script_args.c
+Arguments: 3
+  arg[1]: hello
+  arg[2]: world
+  arg[3]: 123
+```
+
+### Processing arguments
+
+Here's a practical example that processes file arguments:
+
+```c file_info.c
+#!/usr/local/bin/tcc -run
+#include <stdio.h>
+#include <sys/stat.h>
+
+int main(int argc, char **argv)
+{
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <file>...\n", argv[0]);
+        return 1;
+    }
+    
+    for (int i = 1; i < argc; i++) {
+        struct stat st;
+        if (stat(argv[i], &st) == 0) {
+            printf("%s: %ld bytes\n", argv[i], st.st_size);
+        } else {
+            fprintf(stderr, "Error: Cannot stat %s\n", argv[i]);
+        }
+    }
+    
+    return 0;
+}
+```
+
+## TCC options in shebang
+
+### Adding compiler options
+
+You can include TCC options in the shebang line:
+
+```c
+#!/usr/local/bin/tcc -run -Wall -g
+#include <stdio.h>
+
+int main()
+{
+    printf("Script with warnings enabled\n");
+    return 0;
+}
+```
+
+### Linking with libraries
+
+Include library flags in the shebang:
+
+```c math_script.c
+#!/usr/local/bin/tcc -run -lm
+#include <stdio.h>
+#include <math.h>
+
+int main(int argc, char **argv)
+{
+    if (argc < 2) return 1;
+    
+    double x = atof(argv[1]);
+    printf("sqrt(%g) = %g\n", x, sqrt(x));
+    printf("sin(%g) = %g\n", x, sin(x));
+    
+    return 0;
+}
+```
+
+### Complex options
+
+For multiple options, quote them as a single argument:
+
+```c x11_script.c
+#!/usr/local/bin/tcc -run -L/usr/X11R6/lib -lX11
+#include <stdio.h>
+#include <X11/Xlib.h>
+
+int main()
+{
+    Display *display = XOpenDisplay(NULL);
+    if (display) {
+        printf("X11 display opened successfully\n");
+        XCloseDisplay(display);
+    }
+    return 0;
+}
+```
+
+<Warning>
+  Some shells limit the length and format of shebang lines. Keep option lists reasonable or use configuration files.
+</Warning>
+
+## Reading from stdin
+
+TCC can execute C code from standard input:
+
+```bash
+echo 'main(){puts("hello");}' | tcc -run -
+```
+
+Output:
+```
+hello
+```
+
+This is useful for quick testing or piping generated code:
+
+```bash
+cat << 'EOF' | tcc -run -
+#include <stdio.h>
+int main() {
+    for (int i = 1; i <= 5; i++)
+        printf("%d\n", i * i);
+    return 0;
+}
+EOF
+```
+
+Output:
+```
+1
+4
+9
+16
+25
+```
+
+## Using tcclib
+
+TCC provides `tcclib.h`, a minimal library header that includes commonly used functions without requiring standard headers:
+
+```c
+#!/usr/local/bin/tcc -run
+#include <tcclib.h>
+
+int main()
+{
+    printf("Hello from tcclib\n");
+    return 0;
+}
+```
+
+`tcclib.h` provides:
+- Standard I/O functions (`printf`, `fprintf`, `puts`, etc.)
+- Memory functions (`malloc`, `free`, `memcpy`, etc.)
+- String functions (`strlen`, `strcmp`, `strcpy`, etc.)
+- Basic file operations (`fopen`, `fclose`, `fread`, etc.)
+
+<Tip>
+  Using `tcclib.h` instead of standard headers can slightly improve compilation speed for simple scripts.
+</Tip>
+
+## Practical examples
+
+### File processing script
+
+```c process_log.c
+#!/usr/local/bin/tcc -run
+#include <stdio.h>
+#include <string.h>
+
+int main(int argc, char **argv)
+{
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <logfile>\n", argv[0]);
+        return 1;
+    }
+    
+    FILE *f = fopen(argv[1], "r");
+    if (!f) {
+        perror(argv[1]);
+        return 1;
+    }
+    
+    char line[1024];
+    int errors = 0, warnings = 0;
+    
+    while (fgets(line, sizeof(line), f)) {
+        if (strstr(line, "ERROR")) errors++;
+        if (strstr(line, "WARNING")) warnings++;
+    }
+    
+    fclose(f);
+    
+    printf("Log summary:\n");
+    printf("  Errors: %d\n", errors);
+    printf("  Warnings: %d\n", warnings);
+    
+    return 0;
+}
+```
+
+### Text processing
+
+```c word_count.c
+#!/usr/local/bin/tcc -run
+#include <stdio.h>
+#include <ctype.h>
+
+int main(int argc, char **argv)
+{
+    FILE *f = argc > 1 ? fopen(argv[1], "r") : stdin;
+    if (!f) {
+        perror(argv[1]);
+        return 1;
+    }
+    
+    int lines = 0, words = 0, chars = 0;
+    int in_word = 0;
+    int c;
+    
+    while ((c = fgetc(f)) != EOF) {
+        chars++;
+        if (c == '\n') lines++;
+        
+        if (isspace(c)) {
+            in_word = 0;
+        } else if (!in_word) {
+            in_word = 1;
+            words++;
+        }
+    }
+    
+    if (argc > 1) fclose(f);
+    
+    printf("%d lines, %d words, %d chars\n", lines, words, chars);
+    return 0;
+}
+```
+
+Usage:
+```bash
+./word_count.c file.txt
+cat file.txt | ./word_count.c
+```
+
+### System administration
+
+```c disk_usage.c
+#!/usr/local/bin/tcc -run
+#include <stdio.h>
+#include <sys/statvfs.h>
+
+int main(int argc, char **argv)
+{
+    const char *path = argc > 1 ? argv[1] : ".";
+    struct statvfs stat;
+    
+    if (statvfs(path, &stat) != 0) {
+        perror(path);
+        return 1;
+    }
+    
+    unsigned long total = stat.f_blocks * stat.f_frsize;
+    unsigned long available = stat.f_bavail * stat.f_frsize;
+    unsigned long used = total - (stat.f_bfree * stat.f_frsize);
+    int percent = (int)((used * 100) / total);
+    
+    printf("Filesystem: %s\n", path);
+    printf("Total:      %lu MB\n", total / 1048576);
+    printf("Used:       %lu MB (%d%%)\n", used / 1048576, percent);
+    printf("Available:  %lu MB\n", available / 1048576);
+    
+    return 0;
+}
+```
+
+## Performance considerations
+
+### Compilation overhead
+
+While TCC compiles very quickly, there is still a compilation step each time the script runs:
+
+<Tabs>
+  <Tab title="First run">
+    ```bash
+    time ./script.c
+    # real    0m0.021s  (includes compilation)
+    ```
+  </Tab>
+  <Tab title="Subsequent runs">
+    ```bash
+    time ./script.c
+    # real    0m0.020s  (still compiles each time)
+    ```
+  </Tab>
+  <Tab title="Compiled executable">
+    ```bash
+    tcc -o script script.c
+    time ./script
+    # real    0m0.002s  (no compilation)
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  For scripts that run frequently, consider compiling them to avoid the compilation overhead, even though TCC is very fast.
+</Note>
+
+### When to use C scripts
+
+C scripting with TCC is ideal for:
+
+- **System programming tasks** - Direct access to system calls and low-level APIs
+- **Performance-critical scripts** - Faster execution than interpreted languages
+- **Existing C code reuse** - Quickly test or run C code snippets
+- **Learning and prototyping** - Rapid C development without build systems
+
+C scripting may not be ideal for:
+
+- **Simple text processing** - Shell scripts or awk/sed are simpler
+- **Complex string manipulation** - Higher-level languages have better string support
+- **Cross-platform portability** - Requires TCC on target system
+
+## Custom stdin for scripts
+
+Redirect stdin for the running script:
+
+```bash
+tcc -run -rstdin input.txt script.c
+```
+
+This is useful for testing scripts that read from stdin:
+
+```c read_stdin.c
+#!/usr/local/bin/tcc -run
+#include <stdio.h>
+
+int main()
+{
+    char line[256];
+    while (fgets(line, sizeof(line), stdin)) {
+        printf("Got: %s", line);
+    }
+    return 0;
+}
+```
+
+Test with:
+```bash
+tcc -run -rstdin input.txt read_stdin.c
+```
+
+## Debugging scripts
+
+Enable debug info and bounds checking:
+
+```c
+#!/usr/local/bin/tcc -run -g -b
+#include <stdio.h>
+
+int main()
+{
+    int arr[5] = {1, 2, 3, 4, 5};
+    // This will be caught with bounds checking:
+    // printf("%d\n", arr[10]);
+    
+    printf("Script with debugging enabled\n");
+    return 0;
+}
+```
+
+With `-g` and `-b`, you get:
+- Clear error messages with file and line numbers
+- Bounds checking for arrays and pointers
+- Stack traces on errors
+
+<Tip>
+  Use `-bt` to enable backtrace support and see the full call stack when errors occur.
+</Tip>
